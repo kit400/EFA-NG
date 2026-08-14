@@ -21,13 +21,13 @@
 
 Summary:       clamav-unofficial-sigs Maintained and provided by https://eXtremeSHOK.com
 Name:          clamav-unofficial-sigs
-Version:       7.2.5.1
+Version:       7.2.5
 Epoch:         1
 Release:       1.eFa%{?dist}
 License:       Copyright (c) Adrian Jon Kriel admin@extremeshok.com
 Group:         Applications/Utilities
 URL:           https://github.com/extremeshok/clamav-unofficial-sigs
-Source:        https://github.com/shawniverson/clamav-unofficial-sigs/archive/refs/tags/%{version}.tar.gz
+Source:        https://github.com/extremeshok/clamav-unofficial-sigs/archive/refs/tags/%{version}.tar.gz
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch:     noarch
 Requires:      clamav >= 0.101.0

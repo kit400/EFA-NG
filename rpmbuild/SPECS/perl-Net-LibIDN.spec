@@ -48,7 +48,7 @@ This module provides Perl bindings for GNU Libidn by Simon Josefsson
 
 %prep
 %setup -q -n %{pdir}-%{pnam}-%{version}
-%patch0 -p2
+%patch -P 0 -p2
 
 %build
 %{__perl} Makefile.PL \

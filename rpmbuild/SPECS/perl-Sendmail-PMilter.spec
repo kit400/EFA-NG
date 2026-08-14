@@ -48,7 +48,7 @@ has been factored out for inclusion in a separate package to be called Mail::Mil
 %setup -q -n Sendmail-PMilter-%{version}
 
 %build
-%{__perl} Makefile.PL INSTALLDIRS=vendor
+PERL_MM_USE_DEFAULT=1 %{__perl} Makefile.PL INSTALLDIRS=vendor < /dev/null
 make %{?_smp_mflags}
 
 %install

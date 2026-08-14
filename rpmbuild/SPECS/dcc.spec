@@ -31,7 +31,6 @@ URL:       https://www.rhyolite.com/dcc
 License:   Copyright (c) 2014 by Rhyolite Software, LLC
 Source0:   https://www.dcc-servers.net/dcc/source/old/dcc-%{version}.tar.Z
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-BuildRequires: sendmail-devel
 
 %description
 The DCC or Distributed Checksum Clearinghouse is an anti-spam content filter
