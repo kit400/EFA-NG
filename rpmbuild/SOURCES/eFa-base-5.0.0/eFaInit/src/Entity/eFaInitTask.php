@@ -151,6 +151,23 @@ class eFaInitTask
 
     public function setIPv4netmask($var)
     {
+        if (is_string($var)) {
+            $cleaned = ltrim(trim($var), '/');
+            if (filter_var($cleaned, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+                $long = ip2long($cleaned);
+                if ($long !== false) {
+                    $diff = ($long ^ ip2long('255.255.255.255')) + 1;
+                    if ($diff > 0) {
+                        $cidr = 32 - log($diff, 2);
+                        if ($cidr >= 1 && $cidr <= 32) {
+                            $var = (int)$cidr;
+                        }
+                    }
+                }
+            } elseif (is_numeric($cleaned)) {
+                $var = (int)$cleaned;
+            }
+        }
         $this->ipv4netmask = $var;
     }
 

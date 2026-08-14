@@ -209,7 +209,7 @@ class eFaInitController extends AbstractController
             break;
             case "ipv4netmask":
                 $options = array(
-                    'varLabel'    => 'Please enter a valid IPv4 netmask length',
+                    'varLabel'    => 'Please enter your IPv4 netmask or CIDR prefix length (e.g. 27 or 255.255.255.224)',
                     'varProperty' => 'IPv4netmask',
                     'varData'     => $session->get($slug),
                 );
