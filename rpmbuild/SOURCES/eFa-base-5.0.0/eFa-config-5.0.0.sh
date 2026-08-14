@@ -191,3 +191,6 @@ failregex = ^\[.*?\] MailWatch failed login attempt from\: \[<HOST>\] for User: 
 
 ignoreregex =
 EOF
+
+# Ensure httpd_sys_script_t can execute setup scripts via sudo
+semanage permissive -a httpd_sys_script_t 2>/dev/null || true
