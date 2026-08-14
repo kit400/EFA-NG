@@ -197,7 +197,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip add show dev $interface | grep inet\  | grep -v inet\ 127. | awk '{print $2}' | awk -F'/' '{print $1}'");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -220,7 +220,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip add show dev $interface | grep inet\  | grep -v inet\ 127. | awk '{print $2}' | awk -F'/' '{print $2}'");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -244,7 +244,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip -4 route list default dev $interface | awk {'print $3'}");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -268,7 +268,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip add show dev $interface | grep inet6 | grep -v inet6\ ::1 | grep global | awk '{print $2}' | awk -F'/' '{print $1}'");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -292,7 +292,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip add show $interface | grep inet6\ | grep global | awk '{print $2}' | awk -F'/' '{print $2}'");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -316,7 +316,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("ip -6 route list default dev $interface | awk {'print $3'}");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -339,7 +339,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("grep nameserver /etc/resolv.conf | awk '{print $2}' | sed -n 1p");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -362,7 +362,7 @@ class eFaInitController extends AbstractController
                         $process = Process::fromShellCommandline("grep nameserver /etc/resolv.conf | awk '{print $2}' | sed -n 2p");
                         $process->mustRun();
                         $options['varData'] = $process->getOutput();
-                    } catch (ProcessFailedException $exception) {
+                    } catch (\Throwable $exception) {
                         $options['varData'] = '';
                     } 
                 }
@@ -484,17 +484,33 @@ class eFaInitController extends AbstractController
         $nextPage     = 'yesnopage';
         $previousSlug = 'email';
         $previousPage = 'textboxpage';
-        try {
-            $process = Process::fromShellCommandline("ip link show | grep ^[0-9] | awk -F': ' '{print $2}' | sed -e '/^lo/d' -e 's/@.*$//g' | sort | uniq");
-            $process->mustRun();
-            foreach ( explode("\n",$process->getOutput()) as $var ) 
-            {
-                if ( trim($var) !== '') {
-                    $options['varChoices'][trim($var)] = trim($var);
+        $options['varChoices'] = array();
+        if (function_exists('net_get_interfaces')) {
+            $ifaces = @net_get_interfaces();
+            if (is_array($ifaces)) {
+                foreach (array_keys($ifaces) as $iface) {
+                    if ($iface !== 'lo' && !str_starts_with($iface, 'lo:') && !str_starts_with($iface, 'docker') && !str_starts_with($iface, 'veth')) {
+                        $options['varChoices'][$iface] = $iface;
+                    }
                 }
             }
-        } catch (ProcessFailedException $exception) {
-               $options['varChoices']['eth0'] = 'eth0';
+        }
+        if (empty($options['varChoices'])) {
+            try {
+                $process = Process::fromShellCommandline("ip link show | grep ^[0-9] | awk -F': ' '{print $2}' | sed -e '/^lo/d' -e 's/@.*$//g' | sort | uniq");
+                $process->mustRun();
+                foreach ( explode("\n",$process->getOutput()) as $var ) 
+                {
+                    if ( trim($var) !== '') {
+                        $options['varChoices'][trim($var)] = trim($var);
+                    }
+                }
+            } catch (\Throwable $exception) {
+                // fallback
+            }
+        }
+        if (empty($options['varChoices'])) {
+            $options['varChoices']['eth0'] = 'eth0';
         }
         if ($edit === 'edit') {
             $form = $this->createForm(InterfaceEditTaskType::class, $task, $options);
@@ -955,7 +971,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring host and domain...<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -988,7 +1004,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring DNS...<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1021,7 +1037,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring interface...<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1054,7 +1070,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Generating host keys (this may take a while)...<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1086,7 +1102,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring Timezone<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1118,7 +1134,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring razor<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1150,7 +1166,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configure transport<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1182,7 +1198,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring Spamassassin<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1214,7 +1230,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring MailScanner<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1246,7 +1262,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring MailWatch<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1281,7 +1297,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring SASL<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1313,7 +1329,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring SQLGrey<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1345,7 +1361,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring openDMARC<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1377,7 +1393,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring apache<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1409,7 +1425,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring dnf-automatic<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1441,7 +1457,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Locking down root<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring...error",
                 'output'     => $output,
@@ -1473,7 +1489,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring CLI<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1507,7 +1523,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Configuring self-signed cert<br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1539,7 +1555,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Locking down mysql <br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
@@ -1571,7 +1587,7 @@ class eFaInitController extends AbstractController
 
             $output = '<br/>eFa -- Finalizing configuration and rebooting <br/>' . $output;
 
-        } catch (ProcessFailedException $exception) {
+        } catch (\Throwable $exception) {
             return $this->render('configureerror/index.html.twig', array(
                 'title'      => "Configuring",
                 'output'     => $output,
