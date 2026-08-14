@@ -87,10 +87,12 @@ rm composer-setup.php
 
 export COMPOSER_ALLOW_SUPERUSER=1
 cd $RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit
-$RPM_BUILD_ROOT%{_bindir}/composer install --no-interaction --quiet
+APP_ENV=prod $RPM_BUILD_ROOT%{_bindir}/composer install --no-dev --no-interaction --quiet || true
 
 # Cleanup composer for rpm build
-find $RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit/var/cache/prod/ -type f -print0 | xargs -0 sed -i "s|$RPM_BUILD_ROOT||g" $i
+if [ -d "$RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit/var/cache/prod" ]; then
+    find $RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit/var/cache/prod/ -type f -print0 | xargs -0 sed -i "s|$RPM_BUILD_ROOT||g" 2>/dev/null || true
+fi
 
 %pre
 
