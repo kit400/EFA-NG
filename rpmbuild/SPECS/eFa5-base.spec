@@ -85,8 +85,9 @@ mkdir -p $RPM_BUILD_ROOT%{_bindir}
 php composer-setup.php --quiet --install-dir=$RPM_BUILD_ROOT%{_bindir} --filename=composer
 rm composer-setup.php
 
+export COMPOSER_ALLOW_SUPERUSER=1
 cd $RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit
-$RPM_BUILD_ROOT%{_bindir}/composer install --quiet
+$RPM_BUILD_ROOT%{_bindir}/composer install --no-interaction --quiet
 
 # Cleanup composer for rpm build
 find $RPM_BUILD_ROOT%{_localstatedir}/www/eFaInit/var/cache/prod/ -type f -print0 | xargs -0 sed -i "s|$RPM_BUILD_ROOT||g" $i
