@@ -560,28 +560,10 @@ fi
 
 if [[ $genhostkeys -eq 1 ]]; then
   [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Generating SSH Host keys"
-  rm -f /etc/ssh/ssh_host_rsa_key
-  [ $? -ne 0 ] && exit 1
-  rm -f /etc/ssh/ssh_host_dsa_key
-  [ $? -ne 0 ] && exit 1
-  rm -f /etc/ssh/ssh_host_ecdsa_key
-  [ $? -ne 0 ] && exit 1
-  rm -f /etc/ssh/ssh_host_ed25519_key
-  [ $? -ne 0 ] && exit 1
-  ssh-keygen -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa
-  [ $? -ne 0 ] && exit 1
-  ssh-keygen -f /etc/ssh/ssh_host_dsa_key -N '' -t dsa
-  [ $? -ne 0 ] && exit 1
-  ssh-keygen -f /etc/ssh/ssh_host_ecdsa_key -N '' -t ecdsa
-  [ $? -ne 0 ] && exit 1
-  ssh-keygen -f /etc/ssh/ssh_host_ed25519_key -N '' -t ed25519
-  [ $? -ne 0 ] && exit 1
-
-  #[ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Generating dh key for postfix..."
-  #openssl dhparam -out /etc/postfix/ssl/dhparam.pem 2048
-  #[ $? -ne 0 ] && exit 1
-  #postconf -e "smtpd_tls_dh1024_param_file = /etc/postfix/ssl/dhparam.pem"
-  #[ $? -ne 0 ] && exit 1
+  rm -f /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_dsa_key /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_ed25519_key
+  ssh-keygen -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa 2>/dev/null || true
+  ssh-keygen -f /etc/ssh/ssh_host_ecdsa_key -N '' -t ecdsa 2>/dev/null || true
+  ssh-keygen -f /etc/ssh/ssh_host_ed25519_key -N '' -t ed25519 2>/dev/null || true
 fi
 
 if [[ $configtzone -eq 1 ]]; then
