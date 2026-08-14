@@ -28,7 +28,8 @@ Such files may have attachment names similar to WINMAIL.DAT
 %setup -q
 
 %build
-autoreconf
+automake --add-missing --copy --foreign 2>/dev/null || true
+autoreconf -vif
 %configure
 make %{?_smp_mflags}
 chmod a-x THANKS

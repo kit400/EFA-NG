@@ -44,6 +44,7 @@ of mail messages.
 %setup -q -n %{name}-%{version}
 
 %build
+export CFLAGS="%{optflags} -Wno-error=implicit-int -Wno-error=implicit-function-declaration -Wno-error=incompatible-pointer-types -std=gnu89"
 ./configure --disable-dccm --with-installroot=$RPM_BUILD_ROOT --mandir=/usr/share/man --bindir=/usr/bin
 
 make %{?_smp_mflags}
