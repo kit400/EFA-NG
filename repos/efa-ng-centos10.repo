@@ -1,0 +1,18 @@
+[efa-ng]
+name=EFA-NG Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/release
+gpgcheck=0
+enabled=1
+priority=10
+
+[efa-ng-testing]
+name=EFA-NG Testing Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/testing
+gpgcheck=0
+enabled=0
+
+[efa-ng-dev]
+name=EFA-NG Dev Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/dev
+gpgcheck=0
+enabled=0

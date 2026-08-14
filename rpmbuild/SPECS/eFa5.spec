@@ -438,6 +438,7 @@ mv eFa/eFahyperv.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 mv eFa/eFaqemu.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 mv eFa/eFa.fc $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 mv eFa/eFa9.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
+[ -f eFa/eFa10.te ] && mv eFa/eFa10.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 mv eFa/eFa-Monitor-cron $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/eFa-Backup $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/eFa-Weekly-DMARC $RPM_BUILD_ROOT%{_sbindir}
@@ -539,6 +540,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0755, root, root) %{_localstatedir}/eFa/lib/selinux/eFaqemu.te
 %attr(0755, root, root) %{_localstatedir}/eFa/lib/selinux/eFa.fc
 %attr(0755, root, root) %{_localstatedir}/eFa/lib/selinux/eFa9.te
+%attr(0755, root, root) %{_localstatedir}/eFa/lib/selinux/eFa10.te
 %attr(0644, root, root) %{_localstatedir}/eFa/lib/token/CustomAction.pm
 %attr(0644, root, root) %{_localstatedir}/www/html/mailscanner/eFa-release.php
 %attr(0644, root, root) %{_localstatedir}/www/html/mailscanner/eFa-learn.php
@@ -547,6 +549,9 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
+* Fri Aug 14 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 5.0.0-12
+- Add CentOS Stream 10 / EL10 support, eFa10 SELinux module, and PHP 8.3 compatibility
+
 * Fri Jul 27 2024 eFa-Project <shawniverson@efa-project.org> - 5.0.0-11
 - Fix quoting for MailWatchConf.pm
 

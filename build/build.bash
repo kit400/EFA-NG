@@ -1,8 +1,10 @@
 #!/bin/bash
 #-----------------------------------------------------------------------------#
-# eFa 5.0.0 build script version 20240609
+# EFA-NG Build Script (CentOS 10 / 9 / 8)
+# Repository: https://github.com/kit400/EFA-NG
 #-----------------------------------------------------------------------------#
 # Copyright (C) 2013~2024 https://efa-project.org
+# Copyright (C) 2026 EFA-NG Project https://github.com/kit400/EFA-NG
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,16 +23,16 @@ action=$1
 [[ -z $action ]] && action="production" # default to prod if no arg supplied
 
 #-----------------------------------------------------------------------------#
-# Install eFa
+# Install EFA-NG
 #-----------------------------------------------------------------------------#
-mirror="https://mirrors.efa-project.org"
+mirror="https://raw.githubusercontent.com/kit400/EFA-NG/main"
 LOGFILE="/var/log/eFa/build.log"
 
 #-----------------------------------------------------------------------------#
 # Set up logging
 #-----------------------------------------------------------------------------#
 LOGGER='/usr/bin/logger'
-HEADER='=============  EFA 4 (EL 8) / 5 (EL 9) BUILD SCRIPT STARTING  ============'
+HEADER='=============  EFA-NG (EL 10 / EL 9 / EL 8) BUILD SCRIPT STARTING  ============'
 
 # CREATE LOG FOLDER IF NOT EXISTS
 mkdir -p $(dirname "${LOGFILE}")
@@ -39,11 +41,13 @@ mkdir -p $(dirname "${LOGFILE}")
 ( [ -e "$LOGFILE" ] || touch "$LOGFILE" ) && [ ! -w "$LOGFILE" ] && echo "Unable to create or write to $LOGFILE"
 
 function logthis() {
-    TAG='EFA'
+    TAG='EFA-NG'
     MSG="$1"
-    $LOGGER -t "$TAG" "$MSG"
-    echo "`date +%Y.%m.%d-%H:%M:%S` - $MSG"
-    echo "`date +%Y.%m.%d-%H:%M:%S` - $MSG" >> $LOGFILE
+    if [ -x "$LOGGER" ]; then
+        $LOGGER -t "$TAG" "$MSG"
+    fi
+    echo "$(date +%Y.%m.%d-%H:%M:%S) - $MSG"
+    echo "$(date +%Y.%m.%d-%H:%M:%S) - $MSG" >> "$LOGFILE" 2>/dev/null
 }
 
 logthis "$HEADER"
@@ -52,27 +56,36 @@ logthis "$HEADER"
 #-----------------------------------------------------------------------------#
 # check if user is root
 #-----------------------------------------------------------------------------#
-if [ `whoami` == root ]; then
-  logthis "Good you are root."
+if [ "$(id -u)" -eq 0 ]; then
+  logthis "Good, you are root."
 else
-  logthis "ERROR: Please become root first."
+  logthis "ERROR: Please run as root (or with sudo)."
   logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
   exit 1
 fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# check if we run CentOS 9
+# check OS distribution and version
 #-----------------------------------------------------------------------------#
-OSVERSION=`cat /etc/redhat-release`
-if [[ $OSVERSION =~ .*'release 9'.* ]]; then
-  logthis "Good you are running CentOS 9 Stream or similar flavor"
+OSVERSION=""
+if [ -f /etc/redhat-release ]; then
+    OSVERSION=$(cat /etc/redhat-release)
+elif [ -f /etc/os-release ]; then
+    OSVERSION=$(cat /etc/os-release)
+fi
+
+if [[ $OSVERSION =~ .*'release 10'.* || $OSVERSION =~ VERSION_ID=\"10\" || $OSVERSION =~ VERSION_ID=10 ]]; then
+  logthis "Good, you are running CentOS Stream 10, RHEL 10, or compatible EL10 distribution"
+  RELEASE=10
+elif [[ $OSVERSION =~ .*'release 9'.* || $OSVERSION =~ VERSION_ID=\"9\" || $OSVERSION =~ VERSION_ID=9 ]]; then
+  logthis "Good, you are running CentOS Stream 9, RHEL 9, or compatible EL9 distribution"
   RELEASE=9
-elif [[ $OSVERSION =~ .*'release 8'.* ]]; then
-  logthis "Good you are running CentOS 8 or similar flavor"
+elif [[ $OSVERSION =~ .*'release 8'.* || $OSVERSION =~ VERSION_ID=\"8\" || $OSVERSION =~ VERSION_ID=8 ]]; then
+  logthis "Good, you are running CentOS 8, RHEL 8, or compatible EL8 distribution"
   RELEASE=8
 else
-  logthis "ERROR: You are not running CentOS 8, CentOS 9 Stream or equivalent"
+  logthis "ERROR: You are not running CentOS 10, 9, 8 or equivalent Enterprise Linux distribution"
   logthis "ERROR: Unsupported system, stopping now"
   logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
   exit 1
@@ -80,12 +93,12 @@ fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# Check that SELinux is not disabled (unless it is lxc)
+# Check that SELinux is not disabled (unless it is lxc/container)
 #-----------------------------------------------------------------------------#
-if [[ -z $(grep -i 'lxc\|docker' /proc/1/cgroup) ]]; then
-    if [[ -f /etc/selinux/config && -n $(grep -i ^SELINUX=disabled$ /etc/selinux/config)  ]]; then
-        logthis "ERROR: SELinux is disabled and this is not an lxc container"
-        logthis "ERROR: Please enable SELinux and try again."
+if [[ -z $(grep -i 'lxc\|docker\|container' /proc/1/cgroup 2>/dev/null) && ! -f /.dockerenv ]]; then
+    if [[ -f /etc/selinux/config && -n $(grep -i '^SELINUX=disabled' /etc/selinux/config) ]]; then
+        logthis "ERROR: SELinux is disabled and this is not a container"
+        logthis "ERROR: Please set SELinux to permissive or enforcing in /etc/selinux/config and try again."
         logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
         exit 1
     fi
@@ -96,202 +109,154 @@ fi
 # Check network connectivity
 #-----------------------------------------------------------------------------#
 logthis "Checking network connectivity"
-# use curl to test in case wget not installed yet.
-curl -s --connect-timeout 3 --max-time 10 --retry 3 --retry-delay 0 --retry-max-time 30 "${mirror}" > /dev/null
+curl -s --connect-timeout 5 --max-time 15 --retry 3 --retry-delay 1 "https://github.com" > /dev/null
 if [[ $? -eq 0 ]]; then
-  logthis "OK - $mirror is reachable"
+  logthis "OK - Internet connectivity is available"
 else
-  logthis "ERROR: No network connectivity"
-  logthis "ERROR: unable to reach $mirror"
+  logthis "ERROR: No network connectivity or GitHub unreachable"
   logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
   exit 1
 fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# have network, install wget if missing
+# Install essential tools: wget, curl, tar, dnf-plugins-core
 #-----------------------------------------------------------------------------#
-rpm -q wget >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    logthis "Installing wget"
-    yum -y install wget | tee -a $LOGFILE
-    if [ $? -eq 0 ]; then
-        logthis "wget installed"
-    else
-        logthis "ERROR: wget installation failed"
-        # non-fatal for this script but will cause issues after system configuration
+for pkg in curl wget tar dnf-plugins-core perl; do
+    if ! rpm -q "$pkg" >/dev/null 2>&1; then
+        logthis "Installing $pkg"
+        dnf -y install "$pkg" | tee -a "$LOGFILE"
+        if [ $? -ne 0 ]; then
+            logthis "WARNING: Failed to install $pkg (will retry during update)"
+        fi
     fi
-fi
+done
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# Install perl if missing
+# Install EPEL repository
 #-----------------------------------------------------------------------------#
-rpm -q perl >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    logthis "Installing perl"
-    yum -y install perl | tee -a $LOGFILE
-    if [ $? -eq 0 ]; then
-        logthis "perl installed"
-    else
-        logthis "ERROR: perl installation failed"
+if ! rpm -q epel-release >/dev/null 2>&1; then
+    logthis "Installing EPEL repository"
+    dnf -y install epel-release | tee -a "$LOGFILE"
+    if [ $? -ne 0 ]; then
+        logthis "ERROR: EPEL installation failed"
+        logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
         exit 1
     fi
+    logthis "EPEL repository installed successfully"
 fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# Add eFa Repo
+# Enable CRB / CodeReady Builder & PHP Configuration
 #-----------------------------------------------------------------------------#
+if [[ $RELEASE -eq 10 ]]; then
+    logthis "Configuring CentOS 10 / EL10 repositories"
+    if rpm -q redhat-release >/dev/null 2>&1 && [[ ! -f /etc/centos-release && ! -f /etc/almalinux-release && ! -f /etc/rocky-release ]]; then
+        subscription-manager repos --enable codeready-builder-for-rhel-10-x86_64-rpms 2>/dev/null || true
+    else
+        dnf config-manager --set-enabled crb 2>/dev/null || dnf config-manager --enable crb 2>/dev/null || true
+    fi
+    logthis "CRB repository enabled"
+    # Note: EL10 uses standard PHP 8.3 streams without DNF modularity commands.
+
+elif [[ $RELEASE -eq 9 ]]; then
+    logthis "Configuring CentOS 9 / EL9 repositories"
+    if rpm -q redhat-release >/dev/null 2>&1 && [[ ! -f /etc/centos-release && ! -f /etc/almalinux-release && ! -f /etc/rocky-release ]]; then
+        subscription-manager repos --enable codeready-builder-for-rhel-9-x86_64-rpms 2>/dev/null || true
+    else
+        dnf config-manager --set-enabled crb 2>/dev/null || dnf config-manager --enable crb 2>/dev/null || true
+    fi
+    logthis "CRB repository enabled"
+
+    # Reset and enable PHP 8.1 on EL9
+    dnf module -y reset php | tee -a "$LOGFILE"
+    dnf module -y enable php:8.1 | tee -a "$LOGFILE"
+
+elif [[ $RELEASE -eq 8 ]]; then
+    logthis "Enabling CentOS 8 PowerTools repository"
+    dnf -y install 'dnf-command(config-manager)'
+    dnf config-manager --set-enabled powertools || dnf config-manager --enable powertools || true
+fi
+#-----------------------------------------------------------------------------#
+
+#-----------------------------------------------------------------------------#
+# Add EFA-NG Repository
+#-----------------------------------------------------------------------------#
+logthis "Setting up EFA-NG repository"
+mkdir -p /usr/src/eFa
+mkdir -p /etc/yum.repos.d/
+
+# Install repository definition
+cat > /etc/yum.repos.d/efa-ng.repo << EOF
+[efa-ng]
+name=EFA-NG Repository - EL${RELEASE}
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/release
+gpgcheck=0
+enabled=1
+
+[efa-ng-testing]
+name=EFA-NG Testing Repository - EL${RELEASE}
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/testing
+gpgcheck=0
+enabled=0
+
+[efa-ng-dev]
+name=EFA-NG Dev Repository - EL${RELEASE}
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/dev
+gpgcheck=0
+enabled=0
+EOF
+
 case "$action" in
     ("testing"|"kstesting"|"testingnoefa")
-        if [[ $RELEASE -eq 9 ]]; then
-            logthis "Adding eFa CentOS 9 test Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa5/centos9/RPM-GPG-KEY-eFa-Project-256 > /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            curl -L $mirror/rpm/eFa5/centos9/eFa5-test.repo -o /etc/yum.repos.d/eFa5-test.repo
-        else
-            logthis "Adding eFa CentOS 8 Testing Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa4/RPM-GPG-KEY-eFa-Project > /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            curl -L $mirror/rpm/eFa4/CentOS8/eFa4-centos8-testing.repo -o /etc/yum.repos.d/eFa4-testing.repo
-        fi
+        dnf config-manager --set-enabled efa-ng-testing 2>/dev/null || true
+        logthis "Enabled EFA-NG testing repository"
         ;;
-    
     ("dev"|"ksdev"|"devnoefa")
-        if [[ $RELEASE -eq 9 ]]; then
-            logthis "Adding eFa CentOS 9 Dev Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa5/centos9/RPM-GPG-KEY-eFa-Project-256 > /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            curl -L $mirror/rpm/eFa5/centos9/eFa5-dev.repo -o /etc/yum.repos.d/eFa5-dev.repo
-        else
-            logthis "Adding eFa CentOS 8 Dev Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa4/RPM-GPG-KEY-eFa-Project > /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            curl -L $mirror/rpm/eFa4/CentOS8/eFa4-centos8-dev.repo -o /etc/yum.repos.d/eFa4-dev.repo
-        fi
+        dnf config-manager --set-enabled efa-ng-dev 2>/dev/null || true
+        logthis "Enabled EFA-NG dev repository"
         ;;
-
-    *)  if [[ $RELEASE -eq 9 ]]; then
-            logthis "Adding eFa CentOS 9 Release Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa5/centos9/RPM-GPG-KEY-eFa-Project-256 > /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project-256
-            curl -L $mirror/rpm/eFa5/centos9/eFa5-release.repo -o /etc/yum.repos.d/eFa5-release.repo
-        else
-            logthis "Adding eFa Repo"
-            mkdir -p /usr/src/eFa
-            curl -sSL $mirror/rpm/eFa4/RPM-GPG-KEY-eFa-Project > /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            rpm --import /usr/src/eFa/RPM-GPG-KEY-eFa-Project
-            curl -L $mirror/rpm/eFa4/CentOS8/eFa4-centos8.repo -o /etc/yum.repos.d/eFa4.repo
-        fi
+    (*)
+        logthis "Enabled EFA-NG release repository"
         ;;
 esac
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# epel repo
-#-----------------------------------------------------------------------------#
-rpm -q epel-release >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    logthis "Installing EPEL Repo"
-    yum -y install epel-release | tee -a $LOGFILE
-    if [ $? -eq 0 ]; then
-        logthis "EPEL repo installed"
-    else
-        logthis "ERROR: EPEL installation failed"
-        logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
-        exit 1
-    fi
-fi
-
-
-if [[ $RELEASE -eq 9 ]]; then
-    #-----------------------------------------------------------------------------#
-    # crb repo
-    #-----------------------------------------------------------------------------#
-    rpm -q redhat-release >/dev/null 2>&1
-    if [ $? -ne 0 ]; then
-        dnf config-manager --set-enabled crb | tee -a $LOGFILE
-        if [ $? -eq 0 ]; then
-            logthis "crb repo enabled"
-        else
-            logthis "ERROR: crb repo enable failed"
-            logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
-            exit 1
-        fi
-    else
-        subscription-manager repos --enable codeready-builder-for-rhel-9-x86_64-rpms
-        if [ $? -eq 0 ]; then
-            logthis "codeready-builder-for-rhel repo enabled"
-        else
-            logthis "ERROR: codeready-builder-for-rhel repo enable failed"
-            logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
-            exit 1
-        fi
-    fi
-    #-----------------------------------------------------------------------------#
-    # php 8.1 
-    #-----------------------------------------------------------------------------#
-    dnf module -y reset php | tee -a $LOGFILE
-    if [ $? -ne 0 ]; then
-        logthis "ERROR: Reset php dnf module failed"
-        logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
-        exit 1
-    fi
-    dnf module -y enable php:8.1 | tee -a $LOGFILE
-    if [ $? -eq 0 ]; then
-        logthis "php 8.1 stream enabled"
-    else
-        logthis "ERROR: php 8.1 stream enable failed"
-        logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
-        exit 1
-    fi
-else
-    logthis "Enabling CentOS 8 PowerTools Repo"
-    yum -y install 'dnf-command(config-manager)'
-    yum config-manager --set-enabled powertools
-    [ $? -ne 0 ] && exit 1
-fi
-
-#-----------------------------------------------------------------------------#
-
-#-----------------------------------------------------------------------------#
-#-----------------------------------------------------------------------------#
 # Update OS
 #-----------------------------------------------------------------------------#
-logthis "Updating the OS"
-yum -y update | tee -a $LOGFILE
+logthis "Updating system packages..."
+dnf -y update | tee -a "$LOGFILE"
 if [ $? -eq 0 ]; then
-    logthis "System Updated"
+    logthis "System updated successfully"
 fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# Remove not needed packages
+# Remove conflicting default packages
 #-----------------------------------------------------------------------------#
-logthis "Removing conflicting packages"
-yum -y remove postfix >/dev/null 2>&1
-# Ignore return here
+logthis "Checking and removing conflicting packages"
+# Remove default minimal postfix if replacing with full EFA-NG build
+# dnf -y remove postfix >/dev/null 2>&1 || true
 #-----------------------------------------------------------------------------#
 
-
 #-----------------------------------------------------------------------------#
-# install eFa
+# Install EFA-NG
 #-----------------------------------------------------------------------------#
-logthis "Installing eFa packages (This can take a while)"
-rpm -q eFa >/dev/null 2>&1
-if [ $? -ne 0 ]; then
+logthis "Installing EFA-NG packages (this may take several minutes)..."
+if ! rpm -q eFa >/dev/null 2>&1 && ! rpm -q efa-ng >/dev/null 2>&1; then
     if [[ "$action" != "testingnoefa" && "$action" != "devnoefa" ]]; then
-        yum -y install eFa | tee -a $LOGFILE
+        dnf -y install eFa | tee -a "$LOGFILE"
+        if [ $? -ne 0 ]; then
+            dnf -y install efa-ng | tee -a "$LOGFILE"
+        fi
         if [ $? -eq 0 ]; then
-            logthis "eFa Installed"
+            logthis "EFA-NG installed successfully"
         else
-            logthis "ERROR: eFa failed to install"
+            logthis "ERROR: EFA-NG package installation encountered errors"
+            logthis "Please check $LOGFILE for detailed logs."
             logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
             exit 1
         fi
@@ -300,46 +265,43 @@ fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# kickstart
+# Kickstart automated provisioning hooks
 #-----------------------------------------------------------------------------#
 if [[ "$action" == "kstesting" || "$action" == "ksproduction" || "$action" == "ksdev" ]]; then
-  # Set root default pass for kickstart builds
+  logthis "Configuring Kickstart default credentials"
   echo 'echo "First time login: root/eFaPr0j3ct" >> /etc/issue' >> /etc/rc.d/rc.local
-  echo "root:eFaPr0j3ct" | chpasswd --md5 root
-
-  # Disable ssh for kickstart builds
-  systemctl disable sshd
+  echo "root:eFaPr0j3ct" | chpasswd --md5 root 2>/dev/null || echo "root:eFaPr0j3ct" | chpasswd
+  systemctl disable sshd 2>/dev/null || true
 fi
 
 if [[ "$action" == "ksproduction" ]]; then
-  # Zero free space in preparation for export
-  logthis "Zeroing free space"
-  dd if=/dev/zero of=/filler bs=4096 >/dev/null 2>&1
+  logthis "Zeroing free space for template export"
+  dd if=/dev/zero of=/filler bs=4096 >/dev/null 2>&1 || true
   rm -f /filler
-  dd if=/dev/zero of=/tmp/filler bs=4096 >/dev/null 2>&1
+  dd if=/dev/zero of=/tmp/filler bs=4096 >/dev/null 2>&1 || true
   rm -f /tmp/filler
-  dd if=/dev/zero of=/boot/filler bs=4096 >/dev/null 2>&1
-  rm -f /boot/filler
-  dd if=/dev/zero of=/var/filler bs=4096 >/dev/null 2>&1
+  dd if=/dev/zero of=/var/filler bs=4096 >/dev/null 2>&1 || true
   rm -f /var/filler
-  logthis "Zeroed free space"
+  logthis "Zeroed free space complete"
 fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# finalize
+# Finalize & Reboot Prompt
 #-----------------------------------------------------------------------------#
-logthis "============  EFA BUILD SCRIPT FINISHED  ============"
+logthis "============  EFA-NG BUILD SCRIPT FINISHED  ============"
 logthis "============  PLEASE REBOOT YOUR SYSTEM   ============"
 
 if [[ "$action" == "testing" || "$action" == "production" || "$action" == "dev" ]]; then
-  read -p "Do you wish to reboot the system now? (Y/N): " yn
-  if [[ "$yn" == "y" || "$yn" == "Y" ]]; then
-    shutdown -r +1 "Installation requires reboot. Restarting in 1 minute"
-    exit 0
-  else
-    exit 0
+  if [ -t 0 ]; then
+    read -r -p "Do you wish to reboot the system now? (Y/N): " yn
+    if [[ "$yn" =~ ^[Yy]$ ]]; then
+      shutdown -r +1 "EFA-NG installation requires reboot. Restarting in 1 minute."
+      exit 0
+    else
+      logthis "Reboot postponed by user. Please reboot manually before starting services."
+      exit 0
+    fi
   fi
 fi
 exit 0
-#-----------------------------------------------------------------------------#

@@ -109,7 +109,11 @@ if [[ "$instancetype" != "lxc" ]]; then
     setsebool -P httpd_read_user_content 1
 
     # eFa policy module
-    checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa9.te
+    if [ -f /var/eFa/lib/selinux/eFa10.te ]; then
+        checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa10.te
+    elif [ -f /var/eFa/lib/selinux/eFa9.te ]; then
+        checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa9.te
+    fi
     semodule_package -o /var/eFa/lib/selinux/eFa.pp -m /var/eFa/lib/selinux/eFa.mod -f /var/eFa/lib/selinux/eFa.fc
     semodule -i /var/eFa/lib/selinux/eFa.pp
 fi
@@ -121,11 +125,11 @@ cat >> /usr/sbin/eFaFirstBoot.sh << 'EOF'
 #!/bin/bash
 IP=$(ip add | grep inet | grep -v inet\ 127. | grep -v inet6\ ::1 | awk '{print $2}' | awk -F'/' '{print $1}')
 echo '' > /etc/issue
-echo '------------------------------' >> /etc/issue
-echo '------ Welcome to eFa 5 ------' >> /etc/issue
-echo '------------------------------' >> /etc/issue
-echo '-- https://efa-project.org ---' >> /etc/issue
-echo '------------------------------' >> /etc/issue
+echo '--------------------------------------' >> /etc/issue
+echo '--------- Welcome to EFA-NG ----------' >> /etc/issue
+echo '--------------------------------------' >> /etc/issue
+echo '-- https://github.com/kit400/EFA-NG --' >> /etc/issue
+echo '--------------------------------------' >> /etc/issue
 echo '' >> /etc/issue
 echo -e "IP Address(es) for GUI:\n$IP" >> /etc/issue
 EOF

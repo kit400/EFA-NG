@@ -1,0 +1,18 @@
+[efa-ng]
+name=EFA-NG Repository - Enterprise Linux $releasever ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos$releasever/release
+gpgcheck=0
+enabled=1
+priority=10
+
+[efa-ng-testing]
+name=EFA-NG Testing Repository - Enterprise Linux $releasever ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos$releasever/testing
+gpgcheck=0
+enabled=0
+
+[efa-ng-dev]
+name=EFA-NG Dev Repository - Enterprise Linux $releasever ($basearch)
+baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos$releasever/dev
+gpgcheck=0
+enabled=0

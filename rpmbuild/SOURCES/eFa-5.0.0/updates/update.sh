@@ -43,7 +43,11 @@ fi
 
 # Update SELinux
 if [[ $instancetype != "lxc" ]]; then
-    cmd='checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa9.te'
+    if [[ -f /var/eFa/lib/selinux/eFa10.te ]]; then
+        cmd='checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa10.te'
+    else
+        cmd='checkmodule -M -m -o /var/eFa/lib/selinux/eFa.mod /var/eFa/lib/selinux/eFa9.te'
+    fi
     execcmd
     cmd='semodule_package -o /var/eFa/lib/selinux/eFa.pp -m /var/eFa/lib/selinux/eFa.mod -f /var/eFa/lib/selinux/eFa.fc'
     execcmd
