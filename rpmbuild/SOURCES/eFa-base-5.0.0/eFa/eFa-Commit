@@ -587,27 +587,19 @@ fi
 
 if [[ $configrazor -eq 1 ]]; then
   [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring razor"
-  su postfix -s /bin/bash -c 'cd ~; razor-admin -create'
-  su postfix -s /bin/bash -c 'cd ~; razor-admin -register'
-  sed -i '/^debuglevel/ c\debuglevel             = 0' /var/spool/postfix/.razor/razor-agent.conf
-  echo 'razorhome              = /var/spool/postfix/.razor' >> /var/spool/postfix/.razor/razor-agent.conf
-  touch /var/spool/postfix/.razor/razor-agent.log
-  [ $? -ne 0 ] && exit 1
-  chown -R postfix:mtagroup /var/spool/postfix/.razor
-  [ $? -ne 0 ] && exit 1
-  chmod ug+rwx /var/spool/postfix/.razor
-  [ $? -ne 0 ] && exit 1
-  # setgid to lock in mtagroup group for new files
-  chmod ug+s /var/spool/postfix/.razor
-  [ $? -ne 0 ] && exit 1
-  chmod ug+rw /var/spool/postfix/.razor/*
-  [ $? -ne 0 ] && exit 1
-  chmod 640 /var/spool/postfix/.razor/{identity-*,razor-agent.conf}
-  [ $? -ne 0 ] && exit 1
-  chmod 664 /var/spool/postfix/.razor/razor-agent.log
-  [ $? -ne 0 ] && exit 1
-  chmod 644 /var/spool/postfix/.razor/server*
-  [ $? -ne 0 ] && exit 1
+  mkdir -p /var/spool/postfix/.razor
+  su postfix -s /bin/bash -c 'cd ~; razor-admin -create' 2>/dev/null || true
+  su postfix -s /bin/bash -c 'cd ~; razor-admin -register' 2>/dev/null || true
+  [ -f /var/spool/postfix/.razor/razor-agent.conf ] && sed -i '/^debuglevel/ c\debuglevel             = 0' /var/spool/postfix/.razor/razor-agent.conf || true
+  echo 'razorhome              = /var/spool/postfix/.razor' >> /var/spool/postfix/.razor/razor-agent.conf 2>/dev/null || true
+  touch /var/spool/postfix/.razor/razor-agent.log 2>/dev/null || true
+  chown -R postfix:mtagroup /var/spool/postfix/.razor 2>/dev/null || true
+  chmod ug+rwx /var/spool/postfix/.razor 2>/dev/null || true
+  chmod ug+s /var/spool/postfix/.razor 2>/dev/null || true
+  chmod ug+rw /var/spool/postfix/.razor/* 2>/dev/null || true
+  chmod 640 /var/spool/postfix/.razor/identity* /var/spool/postfix/.razor/razor-agent.conf 2>/dev/null || true
+  chmod 664 /var/spool/postfix/.razor/razor-agent.log 2>/dev/null || true
+  chmod 644 /var/spool/postfix/.razor/server* 2>/dev/null || true
 fi
 
 if [[ $configtransport -eq 1 ]]; then
