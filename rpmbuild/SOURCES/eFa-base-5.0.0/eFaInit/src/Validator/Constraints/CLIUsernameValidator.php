@@ -26,13 +26,37 @@ class CLIUsernameValidator extends ConstraintValidator
             throw new UnexpectedTypeException($value, 'string');
         }
         
-        // Test for existing user account
-        $process = new Process(["sudo", "cat", "/etc/passwd"]);
-        $process->mustRun();
-        $output = $process->getOutput();
-        $output = preg_replace('/:.*/', '', $output);
-        
-        if (!preg_match('/^[a-z_][a-z0-9_-]{1,30}+$/', $value, $matches) || preg_match('/' . $value . '/', $output)) {
+        // Check if username format is valid (Linux username rules)
+        if (!preg_match('/^[a-z_][a-z0-9_-]{0,31}$/i', $value)) {
+            $this->context->buildViolation($constraint->message)
+                ->setParameter('{{ string }}', $value)
+                ->addViolation();
+            return;
+        }
+
+        // Check for reserved or existing system users
+        $existingUsers = [
+            'root', 'bin', 'daemon', 'adm', 'lp', 'sync', 'shutdown', 'halt', 'mail',
+            'operator', 'games', 'ftp', 'nobody', 'systemd-network', 'dbus', 'polkitd',
+            'sshd', 'postfix', 'apache', 'mysql', 'clamupdate', 'clamscan', 'mailwatch',
+            'mailscanner', 'unbound', 'sqlgrey', 'dcc', 'pyzor', 'razor'
+        ];
+
+        if (file_exists('/etc/passwd') && is_readable('/etc/passwd')) {
+            $lines = @file('/etc/passwd', FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            if (is_array($lines)) {
+                foreach ($lines as $line) {
+                    $parts = explode(':', $line);
+                    if (!empty($parts[0])) {
+                        $existingUsers[] = strtolower(trim($parts[0]));
+                    }
+                }
+            }
+        }
+
+        $existingUsers = array_unique(array_map('strtolower', $existingUsers));
+
+        if (in_array(strtolower($value), $existingUsers, true)) {
             $this->context->buildViolation($constraint->message)
                 ->setParameter('{{ string }}', $value)
                 ->addViolation();
