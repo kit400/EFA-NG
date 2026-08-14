@@ -244,10 +244,10 @@ Requires: perl-Mail-DKIM >= 1.20200907-4
     #                                            # appstream # spamassassin
 Requires: perl-Mail-SPF >= 2.9.0-26
     #                                            # appstream # spamassassin
-Requires: perl-MaxMind-DB-Reader >= 1.000014-9
-    #                                            # epel      # spamassassin
-Requires: perl-MaxMind-DB-Reader-XS >= 1.000009-3
-    #                                            # epel      # spamassassin
+#Requires: perl-MaxMind-DB-Reader >= 1.000014-9
+#    #                                            # epel      # spamassassin
+#Requires: perl-MaxMind-DB-Reader-XS >= 1.000009-3
+#    #                                            # epel      # spamassassin
 Requires: perl-MIME-Base64 >= 3.16-4
     #                                            # appstream # spamassassin
 Requires: perl-Net-CIDR-Lite >= 0.22-2
@@ -256,8 +256,8 @@ Requires: perl-Net-DNS-Nameserver >= 1.29-6
     #                                            # crb       # spamassassin
 Requires: perl-Net-LibIDN2 >= 1.01-7
     #                                            # epel      # spamassassin
-Requires: perl-Net-Patricia >= 1.22-25
-    #                                            # epel      # spamassassin
+#Requires: perl-Net-Patricia >= 1.22-25
+#    #                                            # epel      # spamassassin
 Requires:  perl-Razor-Agent >= 2.86-1
     # perl-Razor-Agent                           # epel      # spamassassin
 Requires: perl-IP-Country-DB_File >= 3.03-1
@@ -270,8 +270,8 @@ Requires: perl-Geo-IP >= 1.51-1
     #                                            # eFa       # spamassassin
 Requires: perl-IP-Country >= 2.28-1
     #                                            # eFa       # spamassassin
-Requires: perl-Mail-DMARC >= 1.20230215-1
-    #                                            # eFa       # spamassassin
+#Requires: perl-Mail-DMARC >= 1.20230215-1
+#    #                                            # eFa       # spamassassin
 Requires:  perl-Encoding-FixLatin >= 1.04-1
     # perl-Encoding-FixLatin                     # eFa       # MailWatch
 Requires:  tmpwatch >= 2.11-20
@@ -284,7 +284,7 @@ Requires:  MailWatch >= 1:1.2.23-4
     # MailWatch                                  # eFa     # MailWatch Frontend
 Requires:  spamassassin >= 4.0.1-2
     # spamassassin                               # eFa     # MailScanner
-Requires:  clamav-unofficial-sigs >= 1:7.2.5.1-1
+Requires:  clamav-unofficial-sigs >= 1:7.2.5-1
     # clamav-unofficial-sigs                     # eFa     # clamav
 Requires: eFa-base >= 5.0.0-1
     # eFa-base                                   # eFa     # eFa
