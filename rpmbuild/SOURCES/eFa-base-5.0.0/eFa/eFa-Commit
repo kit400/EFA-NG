@@ -423,56 +423,42 @@ done
 if [[ $startmariadb -eq 1 ]]; then
   # Start mariadb Daemon
   [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Starting MariaDB and Configuring"
-  systemctl start mariadb
+  systemctl start mariadb || systemctl restart mariadb
   [ $? -ne 0 ] && exit 1
 
-  # remove default security flaws from MySQL.
   password="eFaPr0j3ct"
-  /usr/bin/mysqladmin -u root password "$password"
-
-  /usr/bin/mysql -u root -p"$password" -e "DROP USER '';" >/dev/null 2>&1
-
-  /usr/bin/mysql -u root -p"$password" -e "DROP USER 'root';" >/dev/null 2>&1
-
-  # Create the databases
-  /usr/bin/mysql -u root -p"$password" -e "CREATE DATABASE sa_bayes"
-
-  /usr/bin/mysql -u root -p"$password" -e "CREATE DATABASE sqlgrey"
-
-  # Create and populate the mailscanner db
-  /usr/bin/mysql -u root -p"$password" < /usr/src/eFa/mariadb/create.sql
-
-  # Create the DMARC db
-  /usr/bin/mysql -u root -p"$password" < /usr/src/eFa/mariadb/schema.mysql
-
-  # Create eFa Token db
-  /usr/bin/mysql -u root -p"$password" < /usr/src/eFa/mariadb/efatokens.sql
-
-  # Create the users
-  /usr/bin/mysql -u root -p"$password" -e "GRANT SELECT,INSERT,UPDATE,DELETE on sa_bayes.* to 'sa_user'@'localhost' identified by '$password'"
-
-  # mailwatch mysql user and login user
-  /usr/bin/mysql -u root -p"$password" -e "GRANT ALL ON mailscanner.* TO mailwatch@localhost IDENTIFIED BY '$password';"
-
-  /usr/bin/mysql -u root -p"$password" -e "GRANT FILE ON *.* to mailwatch@localhost IDENTIFIED BY '$password';"
-
-  # sqlgrey user
-  /usr/bin/mysql -u root -p"$password" -e "GRANT ALL on sqlgrey.* to 'sqlgrey'@'localhost' identified by '$password'"
-
-  # DMARC user
-  /usr/bin/mysql -u root -p"$password" -e "GRANT ALL on opendmarc.* to 'opendmarc'@'localhost' identified by '$password'"
-
-  /usr/bin/mysql -u root -p"$password" -e "GRANT ALL on efa.* to 'efa'@'localhost' identified by '$password'"
-
-  # flush
-  /usr/bin/mysql -u root -p"$password" -e "FLUSH PRIVILEGES;"
-
-  # populate the sa_bayes DB with txrep table
-  /usr/bin/mysql -u root -p"$password" sa_bayes < /usr/src/eFa/mariadb/bayes_mysql.sql
-
   
+  if /usr/bin/mysql -u root -p"$password" -e "SELECT 1;" >/dev/null 2>&1; then
+    MYSQL_CMD="/usr/bin/mysql -u root -p$password"
+  elif /usr/bin/mysql -u root -e "SELECT 1;" >/dev/null 2>&1; then
+    /usr/bin/mysqladmin -u root password "$password" 2>/dev/null || /usr/bin/mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$password'; FLUSH PRIVILEGES;" 2>/dev/null || true
+    MYSQL_CMD="/usr/bin/mysql -u root -p$password"
+  else
+    MYSQL_CMD="/usr/bin/mysql -u root -p$password"
+  fi
+
+  # Create databases if not existing
+  $MYSQL_CMD -e "CREATE DATABASE IF NOT EXISTS sa_bayes;" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE DATABASE IF NOT EXISTS sqlgrey;" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE DATABASE IF NOT EXISTS opendmarc;" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE DATABASE IF NOT EXISTS efa;" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE DATABASE IF NOT EXISTS mailscanner;" 2>/dev/null || true
+
+  # Import schemas
+  [ -f /usr/src/eFa/mariadb/create.sql ] && $MYSQL_CMD --force mailscanner < /usr/src/eFa/mariadb/create.sql 2>/dev/null || true
+  [ -f /usr/src/eFa/mariadb/schema.mysql ] && $MYSQL_CMD --force opendmarc < /usr/src/eFa/mariadb/schema.mysql 2>/dev/null || true
+  [ -f /usr/src/eFa/mariadb/efatokens.sql ] && $MYSQL_CMD --force efa < /usr/src/eFa/mariadb/efatokens.sql 2>/dev/null || true
+  [ -f /usr/src/eFa/mariadb/bayes_mysql.sql ] && $MYSQL_CMD --force sa_bayes < /usr/src/eFa/mariadb/bayes_mysql.sql 2>/dev/null || true
+
+  # Configure users and permissions
+  $MYSQL_CMD -e "CREATE USER IF NOT EXISTS 'sa_user'@'localhost' IDENTIFIED BY '$password'; GRANT SELECT,INSERT,UPDATE,DELETE ON sa_bayes.* TO 'sa_user'@'localhost';" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE USER IF NOT EXISTS 'mailwatch'@'localhost' IDENTIFIED BY '$password'; GRANT ALL ON mailscanner.* TO 'mailwatch'@'localhost'; GRANT FILE ON *.* TO 'mailwatch'@'localhost';" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE USER IF NOT EXISTS 'sqlgrey'@'localhost' IDENTIFIED BY '$password'; GRANT ALL ON sqlgrey.* TO 'sqlgrey'@'localhost';" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE USER IF NOT EXISTS 'opendmarc'@'localhost' IDENTIFIED BY '$password'; GRANT ALL ON opendmarc.* TO 'opendmarc'@'localhost';" 2>/dev/null || true
+  $MYSQL_CMD -e "CREATE USER IF NOT EXISTS 'efa'@'localhost' IDENTIFIED BY '$password'; GRANT ALL ON efa.* TO 'efa'@'localhost';" 2>/dev/null || true
+  $MYSQL_CMD -e "FLUSH PRIVILEGES;" 2>/dev/null || true
+
   systemctl daemon-reload
-  [ $? -ne 0 ] && exit 1
   systemctl restart mariadb
   [ $? -ne 0 ] && exit 1
 fi
