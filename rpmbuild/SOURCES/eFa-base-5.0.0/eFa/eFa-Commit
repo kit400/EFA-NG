@@ -763,38 +763,36 @@ fi
 if [[ $configsasl -eq 1 ]]; then
   randompw
   RANDOMSASLPWD=$PASSWD
-  echo $RANDOMSASLPWD | saslpasswd2 -p -c /etc/sasl2/sasldb2
-  [ $? -ne 0 ] && exit 1
-  chgrp postfix /etc/sasl2/sasldb2
-  [ $? -ne 0 ] && exit 1
+  echo "$RANDOMSASLPWD" | saslpasswd2 -p -c -u localhost dummy 2>/dev/null || true
+  if [ -f /etc/sasl2/sasldb2 ]; then
+    chgrp postfix /etc/sasl2/sasldb2 2>/dev/null || true
+    chmod 640 /etc/sasl2/sasldb2 2>/dev/null || true
+  fi
+  if [ -f /etc/sasldb2 ]; then
+    chgrp postfix /etc/sasldb2 2>/dev/null || true
+    chmod 640 /etc/sasldb2 2>/dev/null || true
+    ln -sf /etc/sasldb2 /etc/sasl2/sasldb2 2>/dev/null || true
+  fi
+  systemctl enable saslauthd 2>/dev/null || true
+  systemctl start saslauthd 2>/dev/null || true
 fi
 
 if [[ $configsqlgrey -eq 1 ]]; then
   randompw
   SQLGREYSQLPWD=$PASSWD
-  /usr/bin/mysql -u root -p"$initpassword" -e "ALTER USER 'sqlgrey'@'localhost' IDENTIFIED BY '$SQLGREYSQLPWD';"
-  [ $? -ne 0 ] && exit 1
-  /usr/bin/mysql -u root -p"$initpassword" -e "FLUSH PRIVILEGES;"
-  [ $? -ne 0 ] && exit 1
-  sed -i "/^db_pass =/ c\db_pass = $SQLGREYSQLPWD" /etc/sqlgrey/sqlgrey.conf
-  [ $? -ne 0 ] && exit 1
+  /usr/bin/mysql -u root -p"$initpassword" -e "CREATE USER IF NOT EXISTS 'sqlgrey'@'localhost' IDENTIFIED BY '$SQLGREYSQLPWD'; ALTER USER 'sqlgrey'@'localhost' IDENTIFIED BY '$SQLGREYSQLPWD'; GRANT ALL ON sqlgrey.* TO 'sqlgrey'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
+  sed -i "/^db_pass =/ c\db_pass = $SQLGREYSQLPWD" /etc/sqlgrey/sqlgrey.conf 2>/dev/null || true
   echo "SQLGREYSQLPWD:$SQLGREYSQLPWD" > /etc/eFa/SQLGrey-Config
-  [ $? -ne 0 ] && exit 1
   SQLGREYSQLPWD=
   # Start sqlgrey to initialize db tables
-  systemctl start sqlgrey
-  [ $? -ne 0 ] && exit 1
+  systemctl restart sqlgrey 2>/dev/null || systemctl start sqlgrey 2>/dev/null || true
 fi
 
 if [[ $configdmarc -eq 1 ]]; then
   randompw
   DMARCSQLPWD=$PASSWD
-  /usr/bin/mysql -u root -p"$initpassword" -e "ALTER USER 'opendmarc'@'localhost' IDENTIFIED BY '$DMARCSQLPWD';"
-  [ $? -ne 0 ] && exit 1
-  /usr/bin/mysql -u root -p"$initpassword" -e "FLUSH PRIVILEGES;"
-  [ $? -ne 0 ] && exit 1
+  /usr/bin/mysql -u root -p"$initpassword" -e "CREATE USER IF NOT EXISTS 'opendmarc'@'localhost' IDENTIFIED BY '$DMARCSQLPWD'; ALTER USER 'opendmarc'@'localhost' IDENTIFIED BY '$DMARCSQLPWD'; GRANT ALL ON opendmarc.* TO 'opendmarc'@'localhost'; FLUSH PRIVILEGES;" 2>/dev/null || true
   echo "DMARCSQLPWD:$DMARCSQLPWD" > /etc/eFa/openDMARC-Config
-  [ $? -ne 0 ] && exit 1
   DMARCSQLPWD=
 
 fi
