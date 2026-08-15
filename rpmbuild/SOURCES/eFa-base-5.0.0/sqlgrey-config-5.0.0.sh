@@ -64,6 +64,8 @@ mkdir -p /etc/systemd/system/sqlgrey.service.d
 echo "[Unit]" > /etc/systemd/system/sqlgrey.service.d/override.conf
 echo "After=syslog.target network.target mariadb.service" >> /etc/systemd/system/sqlgrey.service.d/override.conf
 echo "[Service]" >> /etc/systemd/system/sqlgrey.service.d/override.conf
+echo "User=sqlgrey" >> /etc/systemd/system/sqlgrey.service.d/override.conf
+echo "Group=sqlgrey" >> /etc/systemd/system/sqlgrey.service.d/override.conf
 echo "RuntimeDirectory=sqlgrey" >> /etc/systemd/system/sqlgrey.service.d/override.conf
 echo "RuntimeDirectoryMode=0755" >> /etc/systemd/system/sqlgrey.service.d/override.conf
 echo "PIDFile=/run/sqlgrey/sqlgrey.pid" >> /etc/systemd/system/sqlgrey.service.d/override.conf

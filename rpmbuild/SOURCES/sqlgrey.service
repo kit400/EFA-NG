@@ -1,10 +1,14 @@
 [Unit]
 Description=SQLgrey Postfix Grey-listing Policy service
-After=syslog.target network.target
+After=syslog.target network.target mariadb.service
 
 [Service]
 Type=forking
-PIDFile=/var/run/sqlgrey.pid
+User=sqlgrey
+Group=sqlgrey
+RuntimeDirectory=sqlgrey
+RuntimeDirectoryMode=0755
+PIDFile=/run/sqlgrey/sqlgrey.pid
 ExecStart=/usr/sbin/sqlgrey -d
 
 [Install]
