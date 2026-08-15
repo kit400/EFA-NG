@@ -29,22 +29,23 @@ source /usr/src/eFa/eFa-settings.inc
 #-----------------------------------------------------------------------------#
 echo "Configuring postfix..."
 
-mkdir /etc/postfix/ssl
+mkdir -p /etc/postfix/ssl
+postconf -e "default_database_type = lmdb"
 postconf -e "inet_protocols = ipv4, ipv6"
 postconf -e "inet_interfaces = all"
 postconf -e "mynetworks = 127.0.0.0/8 [::1]/128"
 postconf -e "header_checks = regexp:/etc/postfix/header_checks"
 postconf -e "myorigin = \$mydomain"
 postconf -e "mydestination = \$myhostname, localhost.\$mydomain, localhost"
-postconf -e "relay_domains = hash:/etc/postfix/transport"
-postconf -e "transport_maps = hash:/etc/postfix/transport"
+postconf -e "relay_domains = lmdb:/etc/postfix/transport"
+postconf -e "transport_maps = lmdb:/etc/postfix/transport"
 postconf -e "local_recipient_maps = "
 postconf -e "smtpd_helo_required = yes"
 postconf -e "smtpd_delay_reject = yes"
 postconf -e "disable_vrfy_command = yes"
-postconf -e "virtual_alias_maps = hash:/etc/postfix/virtual"
-postconf -e "alias_maps = hash:/etc/aliases"
-postconf -e "alias_database = hash:/etc/aliases"
+postconf -e "virtual_alias_maps = lmdb:/etc/postfix/virtual"
+postconf -e "alias_maps = lmdb:/etc/aliases"
+postconf -e "alias_database = lmdb:/etc/aliases"
 postconf -e "default_destination_recipient_limit = 1"
 # tls config
 postconf -e "smtp_use_tls = yes"
@@ -70,16 +71,16 @@ postconf -e "tls_preempt_cipherlist = yes"
 postconf -e 'tls_medium_cipherlist = ECDSA+AESGCM:ECDH+AESGCM:DH+AESGCM:ECDSA+AES:ECDH+AES:DH+AES:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+3DES:!aNULL:!MD5:!DSS'
 postconf -e "smtpd_tls_ciphers = medium"
 # restrictions
-postconf -e "smtpd_helo_restrictions =  check_helo_access hash:/etc/postfix/helo_access, reject_invalid_hostname"
-postconf -e "smtpd_sender_restrictions = permit_sasl_authenticated, check_sender_access hash:/etc/postfix/sender_access, reject_non_fqdn_sender, reject_unknown_sender_domain"
-postconf -e "smtpd_data_restrictions =  reject_unauth_pipelining"
+postconf -e "smtpd_helo_restrictions = check_helo_access lmdb:/etc/postfix/helo_access, reject_invalid_hostname"
+postconf -e "smtpd_sender_restrictions = permit_sasl_authenticated, check_sender_access lmdb:/etc/postfix/sender_access, reject_non_fqdn_sender, reject_unknown_sender_domain"
+postconf -e "smtpd_data_restrictions = reject_unauth_pipelining"
 postconf -e "smtpd_forbid_unauth_pipelining = yes"
 postconf -e "smtpd_discard_ehlo_keywords = chunking, silent-discard"
 postconf -e "smtpd_forbid_bare_newline = yes"
 postconf -e "smtpd_forbid_bare_newline_exclusions = \$mynetworks"
 postconf -e "smtpd_client_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_rbl_client zen.spamhaus.org"
 postconf -e "smtpd_relay_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination"
-postconf -e "smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient, reject_unknown_recipient_domain, check_recipient_access hash:/etc/postfix/recipient_access, check_policy_service inet:127.0.0.1:2501, reject_unverified_recipient"
+postconf -e "smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination, reject_non_fqdn_recipient, reject_unknown_recipient_domain, check_recipient_access lmdb:/etc/postfix/recipient_access, check_policy_service inet:127.0.0.1:2501, reject_unverified_recipient"
 postconf -e "unverified_recipient_reject_reason = No user at this address"
 postconf -e "unverified_recipient_reject_code = 550"
 postconf -e "smtpd_milters = inet:127.0.0.1:33333"
@@ -92,8 +93,8 @@ postconf -e "enable_long_queue_ids = yes"
 # error_notice_recipient
 postconf -e "error_notice_recipient = root"
 # canonical maps
-postconf -e "sender_canonical_maps = hash:/etc/postfix/sender_canonical"
-postconf -e "recipient_canonical_maps = hash:/etc/postfix/recipient_canonical"
+postconf -e "sender_canonical_maps = lmdb:/etc/postfix/sender_canonical"
+postconf -e "recipient_canonical_maps = lmdb:/etc/postfix/recipient_canonical"
 
 #other configuration files
 newaliases
@@ -126,7 +127,7 @@ sed -i "/^  unix_listener auth-userdb {/ c\  unix_listener /var/spool/postfix/pr
 sed -i "/^auth_mechanisms = plain/ c\auth_mechanisms = plain login" /etc/dovecot/conf.d/10-auth.conf
 
 # Submission config
-sed -i '/^#submission inet n/ c\submission inet n       -       n       -       -       smtpd\n  -o smtpd_tls_security_level=encrypt\n  -o smtpd_sasl_auth_enable=yes\n  -o smtpd_sasl_type=dovecot\n  -o smtpd_sasl_path=private/auth\n  -o smtpd_sasl_security_options=noanonymous\n  -o smtpd_sasl_local_domain=$myhostname\n  -o smtpd_client_restrictions=permit_sasl_authenticated,reject\n  -o smtpd_sender_login_maps=hash:/etc/postfix/virtual\n  -o smtpd_recipient_restrictions=reject_non_fqdn_recipient,reject_unknown_recipient_domain,permit_sasl_authenticated,reject' /etc/postfix/master.cf
+sed -i '/^#submission inet n/ c\submission inet n       -       n       -       -       smtpd\n  -o smtpd_tls_security_level=encrypt\n  -o smtpd_sasl_auth_enable=yes\n  -o smtpd_sasl_type=dovecot\n  -o smtpd_sasl_path=private/auth\n  -o smtpd_sasl_security_options=noanonymous\n  -o smtpd_sasl_local_domain=$myhostname\n  -o smtpd_client_restrictions=permit_sasl_authenticated,reject\n  -o smtpd_sender_login_maps=lmdb:/etc/postfix/virtual\n  -o smtpd_recipient_restrictions=reject_non_fqdn_recipient,reject_unknown_recipient_domain,permit_sasl_authenticated,reject' /etc/postfix/master.cf
 
 # Enable QMQP delivery
 sed -i "/^#628 / c\qmqp      unix  n       -       n       -       -       qmqpd" /etc/postfix/master.cf
