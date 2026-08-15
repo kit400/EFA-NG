@@ -104,7 +104,6 @@ require {
     type initrc_var_run_t;
     type proc_net_t;
     type dkim_milter_t;
-    type ntpd_t;
     type dhcpc_t;
     type admin_home_t;
     type sssd_t;
@@ -308,8 +307,6 @@ dontaudit httpd_sys_script_t dovecot_t:dir { getattr search };
 dontaudit httpd_sys_script_t dovecot_t:file { read open };
 dontaudit httpd_sys_script_t dkim_milter_t:dir { getattr search };
 dontaudit httpd_sys_script_t dkim_milter_t:file { read open };
-dontaudit httpd_sys_script_t ntpd_t:dir { getattr search };
-dontaudit httpd_sys_script_t ntpd_t:file { read open };
 dontaudit httpd_sys_script_t dhcpc_t:dir { getattr search };
 dontaudit httpd_sys_script_t dhcpc_t:file { read open };
 dontaudit httpd_sys_script_t sssd_t:dir { getattr search };
@@ -448,6 +445,8 @@ allow greylist_milter_t self:capability { kill dac_override };
 allow greylist_milter_t mysqld_port_t:tcp_socket name_connect;
 allow greylist_milter_t tmp_t:dir { add_name write create };
 allow greylist_milter_t tmp_t:file { create write };
+allow greylist_milter_t var_run_t:dir { add_name remove_name write };
+allow greylist_milter_t var_run_t:file { create read write open getattr unlink };
 
 #============= unconfined_t ==============
 allow unconfined_t init_t:service enable;
