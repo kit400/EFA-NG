@@ -31,6 +31,8 @@ echo "Configuring MailWatch..."
 
 # Set php parameters needed
 sed -i '/^short_open_tag =/ c\short_open_tag = On' /etc/php.ini
+sed -i '/^session.gc_maxlifetime =/ c\session.gc_maxlifetime = 259200' /etc/php.ini
+sed -i '/^session.cookie_lifetime =/ c\session.cookie_lifetime = 259200' /etc/php.ini
 
 # Set up connection for MailWatch
 sed -i "/^my (\$db_user) =/ c\my (\$db_user) = 'mailwatch';" /usr/share/MailScanner/perl/custom/MailWatchConf.pm
@@ -39,6 +41,8 @@ sed -i "/^my (\$db_pass) =/ c\my (\$fh);\nmy (\$pw_config) = '/etc/eFa/MailWatch
 sed -i "/^define('DB_PASS',/ c\$efa_config = preg_grep('/^MAILWATCHSQLPWD/', file('/etc/eFa/MailWatch-Config'));\nforeach(\$efa_config as \$num => \$line) {\n  if (\$line) {\n    \$db_pass_tmp = chop(preg_replace('/^MAILWATCHSQLPWD:(.*)/','\$1', \$line));\n  }\n}\ndefine('DB_PASS', \$db_pass_tmp);" /var/www/html/mailscanner/conf.php
 sed -i "/^define('DB_USER',/ c\define('DB_USER', 'mailwatch');" /var/www/html/mailscanner/conf.php
 sed -i "/^define('TIME_ZONE',/ c\define('TIME_ZONE', 'Etc/UTC');" /var/www/html/mailscanner/conf.php
+sed -i "/^define('SESSION_TIMEOUT',/ c\define('SESSION_TIMEOUT', 259200);" /var/www/html/mailscanner/conf.php
+sed -i 's/SESSION_TIMEOUT > 0 && SESSION_TIMEOUT <= 99999/SESSION_TIMEOUT > 0/g' /var/www/html/mailscanner/functions.php
 sed -i "/^define('QUARANTINE_USE_FLAG',/ c\define('QUARANTINE_USE_FLAG', true);" /var/www/html/mailscanner/conf.php
 sed -i "/^define('QUARANTINE_REPORT_FROM_NAME',/ c\define('QUARANTINE_REPORT_FROM_NAME', 'eFa - Email Filter Appliance');" /var/www/html/mailscanner/conf.php
 # Set to false to allow attachment release
