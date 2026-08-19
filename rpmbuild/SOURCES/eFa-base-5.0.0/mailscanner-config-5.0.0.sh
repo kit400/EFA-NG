@@ -27,15 +27,17 @@ source /usr/src/eFa/eFa-settings.inc
 #-----------------------------------------------------------------------------#
 # Start configuration of MailScanner
 #-----------------------------------------------------------------------------#
-echo "Configuring MailScanner..."
-
-chown postfix:mtagroup /var/spool/MailScanner/quarantine
-chown postfix:mtagroup /var/spool/MailScanner/milterin
-chown postfix:mtagroup /var/spool/MailScanner/milterout
-mkdir /var/spool/MailScanner/spamassassin
-chown postfix:mtagroup /var/spool/MailScanner/spamassassin
-mkdir /var/spool/mqueue
-chown postfix:mtagroup /var/spool/mqueue
+usermod -a -G mtagroup postfix
+chown -R postfix:mtagroup /var/spool/MailScanner/quarantine
+chown -R postfix:mtagroup /var/spool/MailScanner/milterin
+chown -R postfix:mtagroup /var/spool/MailScanner/milterout
+chmod -R 775 /var/spool/MailScanner/quarantine
+chmod -R 775 /var/spool/MailScanner/milterin
+chmod -R 775 /var/spool/MailScanner/milterout
+mkdir -p /var/spool/MailScanner/spamassassin
+chown -R postfix:mtagroup /var/spool/MailScanner/spamassassin
+mkdir -p /var/spool/mqueue
+chown -R postfix:mtagroup /var/spool/mqueue
 touch /var/lock/subsys/MailScanner.off
 touch /etc/MailScanner/rules/spam.blacklist.rules
 

@@ -29,6 +29,7 @@ source /usr/src/eFa/eFa-settings.inc
 #-----------------------------------------------------------------------------#
 echo "Configuring postfix..."
 
+usermod -a -G mtagroup postfix 2>/dev/null || true
 mkdir -p /etc/postfix/ssl
 postconf -e "default_database_type = lmdb"
 postconf -e "inet_protocols = ipv4, ipv6"
