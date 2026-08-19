@@ -549,8 +549,13 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
-* Fri Aug 14 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 5.0.0-12
-- Add CentOS Stream 10 / EL10 support, eFa10 SELinux module, and PHP 8.3 compatibility
+* Wed Aug 19 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 5.0.0-12
+- Full port and compatibility for CentOS Stream 10 / EL10
+- Upgrade MailScanner to 5.5.3-2 and MailWatch to 1.2.27
+- Switch Postfix map lookup tables and TLS session caches to LMDB
+- Configure 3-day session timeout for MailWatch and PHP
+- Modernize systemd unit files and fix spool directory permissions for MSMilter
+- Fix SELinux policies (eFa10.te) and idempotent MariaDB 10.11 initialization
 
 * Fri Jul 27 2024 eFa-Project <shawniverson@efa-project.org> - 5.0.0-11
 - Fix quoting for MailWatchConf.pm
