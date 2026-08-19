@@ -1,8 +1,8 @@
-%define releasenum 5
+%define releasenum 2
 %undefine _disable_source_fetch
 
 Name:        MailScanner
-Version:     5.5.1
+Version:     5.5.3
 Release:     %{releasenum}.eFa%{?dist}
 Summary:     Email Gateway Virus Scanner with Malware, Phishing, and Spam Detection
 Group:       System Environment/Daemons
@@ -38,8 +38,8 @@ based Linux distributions.
 
 %prep
 %setup -q -n v5-%{version}-%{releasenum}
-%patch1 -p1
-%patch2 -p1
+%patch -P 1 -p1
+%patch -P 2 -p1
 
 %build
 
@@ -1233,6 +1233,11 @@ exit 0
 %config(noreplace) /usr/share/MailScanner/reports/ca/stored.virus.message.txt
 
 %changelog
+* Wed Aug 19 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 5.5.3-2.eFa
+- Update MailScanner to upstream version 5.5.3-2
+- Preserve all eFa patches (mailscanner-spamrelease.patch, mailscanner-spamreport.patch)
+- Update patch macro syntax for EL10 RPM compatibility
+
 * Wed Dec 27 2023 Shawn Iverson <shawniverson@efa-project.org> - 5.5.1-2
 - Update for eFa
 
