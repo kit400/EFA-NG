@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **CentOS Stream 10 / EL10 Support**: Full support for building and running on Enterprise Linux 10 with GCC 14, modern RPM 4.20, and Linux kernel 6.12+.
 - **MailScanner 5.5.3-2**: Upgraded MailScanner to the latest upstream release (5.5.3-2) with updated antivirus definitions autoupdaters (`f-prot-6-autoupdate`, `kse-autoupdate`).
-- **MailWatch 1.2.27**: Upgraded MailWatch web management interface to upstream version 1.2.27 while retaining all custom eFa branding, relay services, and MailScanner integration hooks.
+- **MailWatch-NG Fork (1.2.27-efa1)**: Created dedicated fork repository [`kit400/MailWatch-NG`](https://github.com/kit400/MailWatch-NG) natively incorporating all eFa branding, relay services (`postfix_relay`, `milter_relay`), Greylisting navigation, and Perl integration modules (`MailWatchConf.pm`), replacing brittle spec-level sed patches.
 - **SELinux Module (`eFa10.te`)**: Created EL10 SELinux module tailored for modern distributions (removed obsolete `ntpd_t`, granted proper runtime directory permissions for `greylist_milter_t` and `httpd_sys_script_t`).
 
 ### Changed
