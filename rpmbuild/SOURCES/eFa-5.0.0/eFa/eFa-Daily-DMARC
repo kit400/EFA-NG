@@ -38,11 +38,15 @@ touch ${HISTDIR}/${HISTFILE}.dat
 mv ${HISTDIR}/${HISTFILE}.dat /tmp/${HISTFILE}.$$
 
 # Import temp history file data and send reports
-/usr/sbin/opendmarc-import -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} < /tmp/${HISTFILE}.$$ >/dev/null 2>&1
-if [[ $SENDREPORTS =~ ^[Yy][Ee][Ss]$ ]]; then
-  /usr/sbin/opendmarc-reports -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} -interval=86400 -report-email $DMARCRepEmail -report-org $DMARCRepDomain -smtp-server=127.0.0.1 >/dev/null 2>&1
+if [ -x /usr/sbin/opendmarc-import ]; then
+  /usr/sbin/opendmarc-import -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} < /tmp/${HISTFILE}.$$ >/dev/null 2>&1 || true
 fi
-/usr/sbin/opendmarc-expire -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} >/dev/null 2>&1
+if [[ $SENDREPORTS =~ ^[Yy][Ee][Ss]$ ]] && [ -x /usr/sbin/opendmarc-reports ]; then
+  /usr/sbin/opendmarc-reports -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} -interval=86400 -report-email $DMARCRepEmail -report-org $DMARCRepDomain -smtp-server=127.0.0.1 >/dev/null 2>&1 || true
+fi
+if [ -x /usr/sbin/opendmarc-expire ]; then
+  /usr/sbin/opendmarc-expire -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} >/dev/null 2>&1 || true
+fi
 
 # Delete temp history file
 rm -f /tmp/${HISTFILE}.$$

@@ -100,6 +100,8 @@ Requires: cyrus-sasl-plain >= 2.1.27-20
     #                                            # base    # eFa
 Requires: opendmarc >= 1.4.2-10
     #                                            # epel    # eFa
+Requires: opendmarc-tools
+    #                                            # epel    # eFa
 Requires: perl-Switch >= 2.17-23
     #                                            # base    # opendmarc
 Requires: fail2ban >= 1.0.1-2

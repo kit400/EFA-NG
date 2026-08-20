@@ -116,13 +116,15 @@ func_setipsettings(){
     postconf -e "error_notice_recipient = root@\$myhostname"
 
     # Issue #155 Change domainname in opendmarc reports
-    DBHOST='localhost'
-    DBUSER='opendmarc'
-    DBPASS="`grep ^DMARCSQLPWD /etc/eFa/openDMARC-Config | sed 's/^.*://'`"
-    DBNAME='opendmarc'
-    DMARCRepDomain="`grep DOMAINNAME /etc/eFa/eFa-Config | sed 's/^.*://'`"
-    DMARCRepEmail="no-reply@$DMARCRepDomain"
-    /usr/sbin/opendmarc-reports -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} -interval=86400 -report-email $DMARCRepEmail -report-org $DMARCRepDomain -smtp-server=127.0.0.1
+    if [ -x /usr/sbin/opendmarc-reports ] && [ -f /etc/eFa/openDMARC-Config ]; then
+      DBHOST='localhost'
+      DBUSER='opendmarc'
+      DBPASS="`grep ^DMARCSQLPWD /etc/eFa/openDMARC-Config | sed 's/^.*://'`"
+      DBNAME='opendmarc'
+      DMARCRepDomain="`grep DOMAINNAME /etc/eFa/eFa-Config | sed 's/^.*://'`"
+      DMARCRepEmail="no-reply@$DMARCRepDomain"
+      /usr/sbin/opendmarc-reports -dbhost=${DBHOST} -dbuser=${DBUSER} -dbpasswd=${DBPASS} -dbname=${DBNAME} -interval=86400 -report-email $DMARCRepEmail -report-org $DMARCRepDomain -smtp-server=127.0.0.1 >/dev/null 2>&1 || true
+    fi
 
     sed -i "/^HOSTNAME:/ c\HOSTNAME:$HOSTNAME" /etc/eFa/eFa-Config
     sed -i "/^DOMAINNAME:/ c\DOMAINNAME:$DOMAINNAME" /etc/eFa/eFa-Config
