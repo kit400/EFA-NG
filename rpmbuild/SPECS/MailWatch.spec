@@ -28,11 +28,11 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       1.2.27
 Epoch:         1
-Release:       14.eFa%{?dist}
+Release:       15.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
-Source:        https://github.com/kit400/MailWatch-NG/archive/v%{version}-efa14.tar.gz
+Source:        https://github.com/kit400/MailWatch-NG/archive/v%{version}-efa15.tar.gz
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch:     noarch
 AutoReqProv:   no
@@ -43,7 +43,7 @@ PHP and MySQL. This is the EFA-NG modernized fork maintained for CentOS Stream 1
 with integrated eFa branding, relay services, and enhanced session handling.
 
 %prep
-%setup -q -n %{name}-NG-%{version}-efa14
+%setup -q -n %{name}-NG-%{version}-efa15
 
 %build
 # Nothing to do
@@ -212,6 +212,9 @@ chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 %{_localstatedir}/www/html/mailscanner/viewpart.php
 
 %changelog
+* Fri Aug 21 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 1.2.27-15
+- Display software versions in structured 2-column table with linked component names
+
 * Fri Aug 21 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 1.2.27-14
 - Compact colorcodes legend, increase ul/ol/li font to 13px, show full version with link in footer and sf_version
 
