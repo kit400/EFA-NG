@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.0.0] - 2026-08-21
+
+### Added
+- **CentOS Stream 10 & Enterprise Linux 10 Support**: Full native support for the Enterprise Linux 10 ecosystem (CentOS Stream 10, RHEL 10, AlmaLinux 10, Rocky Linux 10) leveraging GCC 14, modern RPM 4.20, and Linux kernel 6.12+.
+- **MailScanner 5.5.3-2**: Upgraded multi-threaded scanning pipeline with high-throughput multi-engine processing and updated virus database autoupdaters (`f-prot-6-autoupdate`, `kse-autoupdate`, `freshclam`).
+- **MailWatch-NG Fork (1.2.27-efa1)**: Deep integration of quarantine and management web console [`kit400/MailWatch-NG`](https://github.com/kit400/MailWatch-NG) with native support for PHP 8.3, relay services (`postfix_relay`, `milter_relay`), greylisting management, and Perl integration modules.
+- **SELinux Hardening (`eFa10.te`)**: Modernized security policy profile tailored for EL10 with strict confinement and dedicated capabilities for `greylist_milter_t` and `httpd_sys_script_t`.
+- **Unified Web Portal & Community Forum**: New community web portal running on PHP 8.3 with single sign-on (SSO), comprehensive documentation knowledge base, and integrated community support forum powered by Flarum.
+
+### Changed
+- **Postfix LMDB Migration**: Migrated all routing and lookup tables (`transport`, `virtual`, `helo_access`, `sender_access`, `recipient_access`, `sender_canonical`, `recipient_canonical`, `aliases`) and TLS session caches from deprecated Berkeley DB (`hash:`, `btree:`) to high-performance LMDB (`lmdb:`).
+- **Session & Performance Tuning**: Modernized session lifetimes across web management tools, optimized queue spools permissions (`mtagroup`), and refreshed systemd services (`sqlgrey.service`, `msmilter.service`).
+
+---
+
 ## [5.0.0-12] - 2026-08-19
 
 ### Added
