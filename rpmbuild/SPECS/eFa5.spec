@@ -17,11 +17,11 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 12
+%define releasenum 1
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
-Version:   5.0.0
+Version:   6.0.0
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
 URL:       https://efa-project.org
@@ -551,6 +551,12 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
+* Fri Aug 21 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.0-1
+- Major release 6.0.0 for CentOS Stream 10 / EL10
+- MailScanner 5.5.3-2, MailWatch-NG 1.2.27 on PHP 8.3
+- Postfix LMDB tables migration and enhanced SELinux profile (eFa10.te)
+- Unified Web Portal and Flarum community support integration
+
 * Wed Aug 19 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 5.0.0-12
 - Full port and compatibility for CentOS Stream 10 / EL10
 - Upgrade MailScanner to 5.5.3-2 and MailWatch to 1.2.27
