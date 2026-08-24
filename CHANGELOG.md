@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [6.0.2] - 2026-08-24
+
+### Added
+- **Interactive Monthly Quarantine Calendar (`quarantine.php`)**:
+  - Replaced legacy text date list with a modern interactive 7-day monthly calendar grid with month navigation (`◀`, `Today`, `▶`).
+  - Monthly KPI overview bar (Total Quarantined, Viruses, Spam, Policy/MCP).
+  - Date cells featuring quarantine count badges (`🔒 count ›`) and categorized threat sub-tags (`🦠`, `⚡`, `🛡️`).
+  - Seamless date drilldown displaying the full message operations table directly below the calendar.
+- **Next-Gen Apache ECharts Integration**:
+  - Migrated charting engine to high-performance Apache ECharts with modern design inspired by `ip.space.ua`.
+  - Dual Y-Axis architecture in `js/lineConfig.js` enabling simultaneous display of message counts (0..500) and traffic volume (0..100MB) without scale distortion.
+  - Interactive crosshairs, formatted tooltips with human-readable byte conversion, and responsive auto-resize listeners.
+- **Kit4Mail-Inspired Accordion Dropdown Reports Sidebar**:
+  - Multi-level dropdown navigation across all `rep_*.php` pages with category badges and animated chevron transitions.
+  - Ultra-compact 36px Mini Rail with 100% distinct, unique icons for every category (`🗂️`, `📈`, `🌐`, `👥`, `🛡️`, `📜`, `🔍`, `🕒`).
+  - Hover-to-expand overlay mode when sidebar is minimized.
+- **Table Column Sorting & Pager Enhancements**:
+  - Enabled click-to-sort column headers with directional arrows (`▲`, `▼`, `↕`), removing legacy `A`/`D` letters.
+  - Resolved table DOM nesting issue in `generatePager()` and `dbtable()` to keep message tables cleanly inside the flex layout.
+
+### Fixed
+- **Localization**: Added missing English translation keys for reports categories, filter builders, and message operations.
+- **Traffic Graph Container**: Fixed height and responsive resizing for `#trafficgraph` in top header bar.
+
+---
+
 ## [6.0.0] - 2026-08-21
 
 ### Added
