@@ -133,6 +133,8 @@ chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 %{_localstatedir}/www/html/mailscanner/checklogin.php
 %{_localstatedir}/www/html/mailscanner/clamav.awk
 %{_localstatedir}/www/html/mailscanner/clamav_status.php
+%{_localstatedir}/www/html/mailscanner/dashboard.inc.php
+%{_localstatedir}/www/html/mailscanner/dashboard.php
 %{_localstatedir}/www/html/mailscanner/database.php
 %{_localstatedir}/www/html/mailscanner/detail.php
 %{_localstatedir}/www/html/mailscanner/docs.php
