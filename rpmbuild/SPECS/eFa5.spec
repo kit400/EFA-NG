@@ -21,7 +21,7 @@
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
-Version:   6.0.0
+Version:   6.0.2
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
 URL:       https://efa-project.org
