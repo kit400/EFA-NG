@@ -21,7 +21,7 @@
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
-Version:   6.0.2
+Version:   6.0.3
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
 URL:       https://efa-project.org
@@ -551,6 +551,13 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
+* Wed Aug 26 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.3-1
+- Interactive customizable dashboard engine (11 widgets, drag-and-drop, dynamic sizing, auto-refresh)
+- GeoIP replacement with strato-do/ip-geo and AS/ASN tracking
+- Smart threat signature shortening and hover popups
+- Active Swap memory usage monitoring and system health enhancements
+- Fix message ID validation and detail.php session token checks
+
 * Fri Aug 21 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.0-1
 - Major release 6.0.0 for CentOS Stream 10 / EL10
 - MailScanner 5.5.3-2, MailWatch-NG 1.2.27 on PHP 8.3

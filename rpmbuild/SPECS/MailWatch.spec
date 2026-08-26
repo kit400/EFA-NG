@@ -28,11 +28,11 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       1.2.27
 Epoch:         1
-Release:       15.eFa%{?dist}
+Release:       16.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
-Source:        https://github.com/kit400/MailWatch-NG/archive/v%{version}-efa15.tar.gz
+Source:        https://github.com/kit400/MailWatch-NG/archive/v%{version}-efa16.tar.gz
 BuildRoot:     %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildArch:     noarch
 AutoReqProv:   no
@@ -43,7 +43,7 @@ PHP and MySQL. This is the EFA-NG modernized fork maintained for CentOS Stream 1
 with integrated eFa branding, relay services, and enhanced session handling.
 
 %prep
-%setup -q -n %{name}-NG-%{version}-efa15
+%setup -q -n %{name}-NG-%{version}-efa16
 
 %build
 # Nothing to do
@@ -123,6 +123,7 @@ chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 %{_bindir}/mailwatch/tools/sudo/*
 %{_bindir}/mailwatch/tools/MailScanner_config/*
 %attr(0755, root, root) %{_bindir}/mailwatch/tools/upgrade.php
+%attr(0755, root, root) %{_bindir}/mailwatch/tools/update_geoip.php
 %config(noreplace) %{_localstatedir}/www/html/mailscanner/conf.php
 %attr(0775, root, root) %{_localstatedir}/www/html/mailscanner/images
 %attr(0775, root, root) %{_localstatedir}/www/html/mailscanner/temp
@@ -214,6 +215,12 @@ chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 %{_localstatedir}/www/html/mailscanner/viewpart.php
 
 %changelog
+* Wed Aug 26 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 1.2.27-16
+- Add interactive customizable dashboard engine with 11 dynamic widgets, drag-and-drop, and auto-refresh
+- Migrate GeoIP to strato-do/ip-geo with AS/ASN tracking and ipinfo.io integration
+- Smart threat signature shortening and hover popups
+- Add active Swap memory metrics and fix detail.php token timeouts and msgid validation
+
 * Fri Aug 21 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 1.2.27-15
 - Display software versions in structured 2-column table with linked component names
 

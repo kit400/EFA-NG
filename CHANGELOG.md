@@ -5,6 +5,32 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.3] - 2026-08-26
+
+### Added
+- **Interactive Customizable Dashboard Engine (`dashboard.php`, `dashboard.inc.php`)**:
+  - Full-featured, responsive 12-column widget dashboard grid with intuitive HTML5 drag-and-drop reordering.
+  - Per-user dashboard layout customization saved directly to database (`user_dashboards`).
+  - Dynamic widget sizing options (25%, 33%, 50%, 66%, 100% column widths).
+  - Add Widget catalog modal supporting 11 dynamic widgets: KPI Overview, 24h Traffic Trends, Security Threat Donut, Top Relay Countries & AS/ASN, Top Senders & Recipients, Recent Intercepted Threats, Recent Processed Messages, Core System Services & Memory/Swap, Top SpamAssassin Rules, Quarantine Health, and Quick Admin Actions.
+  - Dynamic auto-refresh with configurable intervals (Off, 30s, 60s, 120s, 300s, default 60s), live countdown indicator, smooth opacity fade transitions, and calm refresh animations.
+  - Integrated default system dashboard with comprehensive monitoring.
+- **`strato-do/ip-geo` Integration & Autonomous System (AS / ASN) Tracking**:
+  - Replaced legacy MaxMind GeoIP with modern open-source `strato-do/ip-geo` database providing countries, cities, and Autonomous System details.
+  - Added clickable ASN badges linking directly to `https://ipinfo.io/AS<number>` across message details, reports, and top relay widgets.
+  - Zero-credential 1-click database updates in `geoip_update.php` and automated CLI cron `update_geoip.php`.
+- **Intelligent Threat Signature Formatting & Hover Tooltips**:
+  - Smart shortening of long virus strings (e.g. `Virus (ClamAV (Eicar-Test-Signature / Win32.Trojan.Gen-8912))` shortened to `Virus (Eicar-Test-Signature)`).
+  - Modern CSS hover popups displaying the complete scanner signature and engine report upon cursor hover.
+- **Enhanced System Services & Memory Monitoring**:
+  - Added active Swap memory usage tracking and progress bars (`used / total (pct%)`) in System Health.
+  - Clarified embedded MailScanner SpamAssassin engine status (`● ACTIVE`).
+
+### Fixed
+- **Message Detail Navigation (`detail.php`)**: Fixed session token validation so direct GET navigation from dashboards and reports does not trigger false timeout logouts.
+- **Message ID Validation**: Expanded `validateInput(..., 'msgid')` in `functions.php` to accept modern MTA and Postfix long queue ID formats.
+- **Relay Drilldown Filtering**: Fixed `rep_message_listing.php?relay=...` drilldowns to match both `clientip` and message header IP records.
+
 ---
 
 ## [6.0.2] - 2026-08-24
