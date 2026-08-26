@@ -5,6 +5,34 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.4] - 2026-08-26
+
+### Added
+- **Vector Country Flags (SVG Pack)**:
+  - Added 271 high-resolution SVG country flag icons in `images/flags/`.
+  - Added `format_country_flag($countryCode, $countryName)` helper function in `functions.php`.
+  - Integrated flag icons into Message Details relay hop table (`detail.php`), Top Relay Countries & AS/ASN widget (`dashboard.inc.php`), and GeoIP reports (`graphgenerator.inc.php`).
+- **Brand Identity & Favicon Overhaul**:
+  - New high-contrast vector favicon featuring Ukrainian national colors (azure shield and golden security check).
+  - Modernized large main header logo matching UI theme button gradient (`#1f6cb0`).
+- **Telegram Announcements Integration**:
+  - Automated dual-language (English + Ukrainian) release broadcasting via Telegram Bot to `@EFA_NG` Announcements topic (`t.me/EFA_NG/3`).
+  - Secure credential isolation (`.efa-telegram.env`) preventing token leaks to Git.
+
+### Changed
+- **KPI Summary Cards Single-Row Compact Layout**:
+  - Compacted all 6 KPI cards (Total, Clean, Spam, Threats, Queues, Health) into a streamlined single 6-column row with horizontal scroll support.
+- **Search & Reports Sidebar Badges**:
+  - Right-aligned submenu count indicator badges and category pills alongside chevron accordions for improved visual hierarchy.
+
+### Fixed
+- **Login & Auth Pages Logo Scaling**:
+  - Fixed logo image sizing and container bounds on `login.php`, `password_reset.php`, and `auto-release.php` to prevent 800px logo overflow.
+- **TLS Certificate Multi-Domain SAN**:
+  - Expanded SSL/TLS certificate to cover both `efa-test.ukrpack.net` and `efa-ng-test.ukrpack.net`.
+
+---
+
 ## [6.0.3] - 2026-08-26
 
 ### Added
