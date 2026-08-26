@@ -169,13 +169,13 @@ if [ "$DRY_RUN" -eq 0 ]; then
     success "Documentation synchronized to http://efa-ng.space.ua/docs/08-changelog"
 fi
 
-# STEP 5: Publish Announcement to Community Forum (http://forum.efa-ng.space.ua/t/announcements)
-log "Step 5: Publishing release announcement to Flarum Community Forum..."
+# STEP 5: Publish Announcement to Community Forum & Telegram Topic
+log "Step 5: Publishing release announcement to Flarum Forum & Telegram Announcements Topic..."
 if [ "$DRY_RUN" -eq 0 ]; then
-    php "${PORTAL_DIR}/deploy/announce.php" --version="${CLEAN_VERSION}" --tag="announcements"
-    success "Release announcement posted to http://forum.efa-ng.space.ua/t/announcements"
+    php "${PORTAL_DIR}/deploy/announce.php" --version="${CLEAN_VERSION}" --tag="announcements" --telegram
+    success "Release announcement posted to Forum (http://forum.efa-ng.space.ua/t/announcements) & Telegram (t.me/EFA_NG/3)"
 else
-    log "[DRY-RUN] Would publish announcement for ${CLEAN_VERSION} to http://forum.efa-ng.space.ua/t/announcements"
+    log "[DRY-RUN] Would publish announcement for ${CLEAN_VERSION} to Forum & Telegram (t.me/EFA_NG/3)"
 fi
 
 # STEP 6: In-App Broadcast Notification in MailWatch-NG
@@ -202,5 +202,6 @@ success "🎉 Release ${TAG_NAME} completed successfully!"
 log "  Portal:       http://efa-ng.space.ua"
 log "  Changelog:    http://efa-ng.space.ua/docs/08-changelog"
 log "  Forum Tag:    http://forum.efa-ng.space.ua/t/announcements"
+log "  Telegram:     https://t.me/EFA_NG/3"
 log "  Test Server:  https://efa-ng-test.ukrpack.net"
 log "==============================================================="
