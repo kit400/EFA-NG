@@ -181,19 +181,12 @@ fi
 # STEP 6: In-App Broadcast Notification in MailWatch-NG
 log "Step 6: Broadcasting release notification to MailWatch-NG users..."
 if [ "$SKIP_DEPLOY" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-    ssh -o BatchMode=yes efa-test "php -r '
-        require_once \"/var/www/html/mailscanner/functions.php\";
-        if (class_exists(\"SystemNotifications\")) {
-            SystemNotifications::createNotification(
-                \"🚀 EFA-NG ${CLEAN_VERSION} Released!\",
-                \"New release EFA-NG ${CLEAN_VERSION} has been deployed. Check out what is new at https://efa-ng.space.ua/changelog and http://forum.efa-ng.space.ua/t/announcements\",
-                \"info\",
-                \"system\",
-                null,
-                \"https://efa-ng.space.ua/changelog\"
-            );
-        }
-    '" 2>/dev/null || warn "Could not create in-app broadcast notification on efa-test."
+    ssh -o BatchMode=yes efa-test "php /var/www/html/mailscanner/tools/send_update_notification.php \
+        --type='release' \
+        --title='🚀 EFA-NG ${CLEAN_VERSION} Released!' \
+        --version='${CLEAN_VERSION}' \
+        --desc='New release EFA-NG ${CLEAN_VERSION} has been deployed. Check out what is new at https://efa-ng.space.ua/changelog and http://forum.efa-ng.space.ua/t/announcements' \
+        --changelog='http://efa-ng.space.ua/docs/08-changelog'" 2>/dev/null || warn "Could not create in-app broadcast notification on efa-test."
     success "In-app broadcast notification delivered."
 fi
 
