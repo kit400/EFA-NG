@@ -278,6 +278,43 @@ func_dispatch_choice() {
   esac
 }
 
+fmt_header_full() {
+  local label="$1"
+  local val="$2"
+  local content="${label} : ${val}"
+  local len=${#content}
+  local max=68
+  if [ $len -gt $max ]; then
+    content="${content:0:$((max-3))}..."
+    len=$max
+  fi
+  local pad=$(( max - len ))
+  local spaces=$(printf "%*s" "$pad" "")
+  echo -e " ${cyan}│${clean}  ${content}${spaces}  ${cyan}│${clean}"
+}
+
+fmt_header_split() {
+  local l_label="$1"
+  local l_val="$2"
+  local r_label="$3"
+  local r_val="$4"
+  
+  local left="${l_label} : ${l_val}"
+  local right="${r_label} : ${r_val}"
+  
+  local l_len=${#left}
+  local r_len=${#right}
+  local pad=$(( 68 - l_len - r_len ))
+  if [ $pad -lt 2 ]; then
+    local max_l=$(( 68 - ${#l_label} - 3 - r_len - 5 ))
+    left="${l_label} : ${l_val:0:$max_l}..."
+    l_len=${#left}
+    pad=$(( 68 - l_len - r_len ))
+  fi
+  local spaces=$(printf "%*s" "$pad" "")
+  echo -e " ${cyan}│${clean}  ${left}${spaces}${right}  ${cyan}│${clean}"
+}
+
 # Modern Dashboard Menu
 show_modern_menu() {
   local host=$(hostname -f 2>/dev/null || hostname)
@@ -321,9 +358,10 @@ show_modern_menu() {
   echo -e " ${cyan}│${clean}                      ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                      ${cyan}│${clean}"
   echo -e " ${cyan}│${clean}                        https://efa-ng.space.ua                         ${cyan}│${clean}"
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-  printf " ${cyan}│${clean}   Host   : %-42.42s Version: %-6.6s   ${cyan}│${clean}\n" "$host ($ip)" "$eFaVERSION"
-  printf " ${cyan}│${clean}   Uptime : %-30.30s Load   : %-16.16s   ${cyan}│${clean}\n" "$uptime_str" "$load"
-  printf " ${cyan}│${clean}   Memory : %-30.30s Mode   : %-16.16s   ${cyan}│${clean}\n" "$mem" "Modern Dashboard"
+  fmt_header_full  "Hostname" "$host"
+  fmt_header_split "IP Addr " "$ip" "eFa     " "v$eFaVERSION"
+  fmt_header_split "Uptime  " "$uptime_str" "Load    " "$load"
+  fmt_header_split "Memory  " "$mem" "UI Mode " "Modern Dashboard"
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
   echo -e " ${cyan}│${clean}   ${bold}SERVICES:${clean}                                                            ${cyan}│${clean}"
   echo -e " ${cyan}│${clean}   Postfix: [$b_postfix]       MailScanner: [$b_ms]       MariaDB: [$b_maria]   ${cyan}│${clean}"
