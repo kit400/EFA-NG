@@ -17,14 +17,14 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 1
+%define releasenum 2
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
 Version: 6.0.4
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
-URL:       https://efa-project.org
+URL:       https://efa-ng.space.ua
 License:   GNU GPL v3+
 Source0:   eFa-%{version}.tar.gz
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
@@ -408,7 +408,7 @@ died.
 We try to create a complete package using existing open-source anti-spam
 projects and combine them to a single easy to use (virtual) appliance.
 
-For more information go to https://efa-project.org
+For more information go to https://efa-ng.space.ua
 
 eFa v5 is a rebuild of the previous eFa v4; the same components are used whenever
 possible but are all updated to the latest version.

@@ -17,7 +17,7 @@ function func_system-restore() {
   echo -e "appliance is fully updated to the latest v4 version and the"
   echo -e "backup file is based on this latest version before continuing."
   echo -e ""
-  echo -en "$green[eFa]$clean Are you sure you want to continue? (y/N):"
+  echo -en "$green[eFa-NG]$clean Are you sure you want to continue? (y/N):"
   local TMPRECOVER
   read TMPRECOVER
   local flag=0
@@ -225,7 +225,7 @@ function func_system-restore() {
         flag=1
       else
         echo -e "An invalid option $red $TMPRECOVER $clean was entered."
-        echo -en "$green[eFa]$clean Are you sure you want to continue? (y/N):"
+        echo -en "$green[eFa-NG]$clean Are you sure you want to continue? (y/N):"
         read TMPRECOVER
       fi
     done

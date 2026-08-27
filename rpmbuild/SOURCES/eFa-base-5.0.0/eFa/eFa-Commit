@@ -422,7 +422,7 @@ done
 
 if [[ $startmariadb -eq 1 ]]; then
   # Start mariadb Daemon
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Starting MariaDB and Configuring"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Starting MariaDB and Configuring"
   systemctl start mariadb || systemctl restart mariadb
   [ $? -ne 0 ] && exit 1
 
@@ -465,7 +465,7 @@ fi
 
 if [[ $confighost -eq 1 ]]; then
   # Network settings
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring hostname and domainname"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configuring hostname and domainname"
   echo "127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4" > /etc/hosts
   [ $? -ne 0 ] && exit 1
   echo "::1         localhost localhost.localdomain localhost6 localhost6.localdomain6" >> /etc/hosts
@@ -508,7 +508,7 @@ if [[ $confighost -eq 1 ]]; then
   fi
 
 if [[ $configip -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Setting IP settings"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Setting IP settings"
   
   if [[ -n $IPV4ADDRESS ]]; then
     NAME=$(nmcli -t c show --active | grep ":$INTERFACE" | grep "802-3-ethernet" | awk -F':' '{print $1}')
@@ -531,7 +531,7 @@ if [[ $configip -eq 1 ]]; then
 fi
 
 if [[ $configdns -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Setting DNS"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Setting DNS"
 
   if [[ $IPV6DNS -eq 0 ]]; then
     sed -i '/^\t# do-ip6:/ c\\tdo-ip6: no' /etc/unbound/unbound.conf
@@ -559,7 +559,7 @@ if [[ $configdns -eq 1 ]]; then
 fi
 
 if [[ $genhostkeys -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Generating SSH Host keys"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Generating SSH Host keys"
   rm -f /etc/ssh/ssh_host_rsa_key /etc/ssh/ssh_host_dsa_key /etc/ssh/ssh_host_ecdsa_key /etc/ssh/ssh_host_ed25519_key
   ssh-keygen -f /etc/ssh/ssh_host_rsa_key -N '' -t rsa 2>/dev/null || true
   ssh-keygen -f /etc/ssh/ssh_host_ecdsa_key -N '' -t ecdsa 2>/dev/null || true
@@ -569,7 +569,7 @@ fi
 if [[ $configtzone -eq 1 ]]; then
   virtplatform=`/usr/sbin/virt-what`
 
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configure timezone"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configure timezone"
   if [[ "$virtplatform" != "lxc" ]]; then
     if [[ $ISUTC -eq true || $ISUTC -eq 1 ]]; then
       timedatectl set-local-rtc 0 >/dev/null 2>&1
@@ -586,7 +586,7 @@ if [[ $configtzone -eq 1 ]]; then
 fi
 
 if [[ $configrazor -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring razor"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configuring razor"
   mkdir -p /var/spool/postfix/.razor
   su postfix -s /bin/bash -c 'cd ~; razor-admin -create' 2>/dev/null || true
   su postfix -s /bin/bash -c 'cd ~; razor-admin -register' 2>/dev/null || true
@@ -603,7 +603,7 @@ if [[ $configrazor -eq 1 ]]; then
 fi
 
 if [[ $configtransport -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Allow the current to receive mails"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Allow the current to receive mails"
   if [[ -f /etc/postfix/transport.bak ]]; then
     rm -f /etc/postfix/transport
     [ $? -ne 0 ] && exit 1
@@ -640,7 +640,7 @@ if [[ $configtransport -eq 1 ]]; then
 fi
 
 if [[ $configsa -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring spamassassin"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configuring spamassassin"
   if [[ -f /etc/MailScanner/spamassassin.conf.bak ]]; then
     rm -f /etc/MailScanner/spamassassin.conf
     [ $? -ne 0 ] && exit 1
@@ -682,7 +682,7 @@ if [[ $configsa -eq 1 ]]; then
 fi
 
 if [[ $configmailscanner -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring MailScanner"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configuring MailScanner"
   if [[ -f /etc/MailScanner/MailScanner.conf.bak ]]; then
     rm -f /etc/MailScanner/MailScanner.conf
     [ $? -ne 0 ] && exit 1
@@ -713,7 +713,7 @@ if [[ $configmailscanner -eq 1 ]]; then
 fi
 
 if [[ $configmailwatch -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Configuring MailWatch"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Configuring MailWatch"
   sed -i "/^define('MAILWATCH_FROM_ADDR'/ c\define('MAILWATCH_FROM_ADDR', 'no-reply@$HOSTNAME.$DOMAINNAME');" /var/www/html/mailscanner/conf.php
   [ $? -ne 0 ] && exit 1
   sed -i "/^define('TIME_ZONE',/ c\define('TIME_ZONE', '$TZONE');" /var/www/html/mailscanner/conf.php
@@ -810,13 +810,13 @@ if [[ $configyumcron -eq 1 ]]; then
 fi
 
 if [[ $configroot -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Lockdown root"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Lockdown root"
   passwd -l root
   [ $? -ne 0 ] && exit 1
 fi
 
 if [[ $configcli -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean - Creating cli user"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean - Creating cli user"
 
   # Cleanup in case of failed run
   userdel -rf $CLIUSERNAME >/dev/null 2>&1
@@ -832,7 +832,7 @@ if [[ $configcli -eq 1 ]]; then
 fi
 
 if [[ $configcert -eq 1 ]]; then
-  [ $verbose -eq 1 ] && echo -e "$green[eFa]$clean Generating Apache and postfix self-signed cert"
+  [ $verbose -eq 1 ] && echo -e "$green[eFa-NG]$clean Generating Apache and postfix self-signed cert"
   cd /etc/pki/tls/certs
   openssl req -newkey rsa:2048 -keyout ../private/localhost.key -nodes -x509 -days 3650 -out localhost.crt -subj "/O=$DOMAINNAME/CN=$HOSTNAME.$DOMAINNAME"
   [ $? -ne 0 ] && exit 1

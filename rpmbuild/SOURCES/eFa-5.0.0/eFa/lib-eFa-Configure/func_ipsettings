@@ -47,7 +47,7 @@ func_ip-settings(){
       echo -e "$red Note: Network will reset when committing values (y).$clean"
       echo -e ""
       echo -e "Enter setting you want to change"
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in

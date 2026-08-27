@@ -172,14 +172,14 @@ function user_check()
 {
   if [ `whoami` == root ]
     then
-      echo "[eFa] Good you are root"
+      echo "[eFa-NG] Good you are root"
       if [[ ${action} == "-backup" ]]; then
         start_backup
       elif [[ ${action} == "-purge" ]]; then
         start_purge
       fi
   else
-    echo "[eFa] Please become root to run this backup"
+    echo "[eFa-NG] Please become root to run this backup"
     exit 0
   fi
 }

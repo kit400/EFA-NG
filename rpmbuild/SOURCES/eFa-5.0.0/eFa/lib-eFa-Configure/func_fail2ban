@@ -8,12 +8,12 @@ function func_fail2ban() {
     local ASK
     local flag
 
-    echo -e "$green[eFa]$clean Fail2Ban protects you from attempts to access SSH and Postfix"
+    echo -e "$green[eFa-NG]$clean Fail2Ban protects you from attempts to access SSH and Postfix"
 
     flag=0
     while [ $flag -eq 0 ]; do
         echo -e ""
-        echo -e -n "$green[eFa]$clean Would you like to $green Enable $clean Fail2Ban? [Y/n/c]: "
+        echo -e -n "$green[eFa-NG]$clean Would you like to $green Enable $clean Fail2Ban? [Y/n/c]: "
         read ASK
         if [[ $ASK =~ ^[yY]$ || -z $ASK ]]; then
             flag=1
@@ -50,7 +50,7 @@ EOF
             systemctl enable fail2ban
             systemctl restart fail2ban
             
-            echo -e "$green[eFa]$clean Fail2Ban is now enabled."
+            echo -e "$green[eFa-NG]$clean Fail2Ban is now enabled."
 
             pause
         elif [[ $ASK =~ ^[nN]$ ]]; then
@@ -59,11 +59,11 @@ EOF
             systemctl disable fail2ban
             systemctl stop fail2ban
 
-            echo -e "$green[eFa]$clean Fail2Ban is now disabled"
+            echo -e "$green[eFa-NG]$clean Fail2Ban is now disabled"
             pause
         elif [[ $ASK =~ ^[cC]$ ]]; then
             flag=1
-            echo -e "$green[eFa]$clean No action taken"
+            echo -e "$green[eFa-NG]$clean No action taken"
             pause
             else
             echo -e "Choice $green\"$ASK\"$clean is not a valid choice."

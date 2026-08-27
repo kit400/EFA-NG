@@ -13,7 +13,7 @@ function func_apache-settings() {
       echo -e ""
       echo -e "e) Return to main menu"
       echo -e ""
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -35,7 +35,7 @@ function func_https() {
   echo -e "By default, EFA uses port 443"
   echo -e "You can enable port 443 for secure access."
   echo -e ""
-  echo -e -n "$green[eFa]$clean Enable port 443? (Y/n/c): "
+  echo -e -n "$green[eFa-NG]$clean Enable port 443? (Y/n/c): "
   local TMPSECURE
   read TMPSECURE
 
@@ -81,7 +81,7 @@ function func_https() {
       else
         echo -e "Choice $green\"$TMPSECURE\"$clean is not a valid choice."
         echo -e ""
-        echo -e -n "$green[eFa]$clean Enable port 443? (Y/n/c): "
+        echo -e -n "$green[eFa-NG]$clean Enable port 443? (Y/n/c): "
         read TMPSECURE 
       fi
     done
@@ -91,7 +91,7 @@ function func_https() {
       echo -e "Port 80 --> 443 Redirect"
       echo -e "You can choose to redirect all port 80 traffic to port 443"
       echo -e ""
-      echo -e -n "$green[eFa]$clean Redirect port 80 to port 443? (Y/n): "
+      echo -e -n "$green[eFa-NG]$clean Redirect port 80 to port 443? (Y/n): "
       local TMPREDIRECT
       read TMPREDIRECT
 
@@ -129,7 +129,7 @@ function func_https() {
       else
         echo -e "Choice $green\"$TMPREDIRECT\"$clean is not a valid choice."
         echo -e ""
-        echo -e -n "$green[eFa]$clean Redirect port 80 to port 443? (Y/n): "
+        echo -e -n "$green[eFa-NG]$clean Redirect port 80 to port 443? (Y/n): "
         read TMPREDIRECT 
       fi
     done

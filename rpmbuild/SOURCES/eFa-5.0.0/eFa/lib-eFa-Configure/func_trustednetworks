@@ -7,11 +7,11 @@ function func_ask-trustednets() {
     do
       func_echo-header
       echo -e ""
-      echo -e "$green[eFa]$clean Trusted Network Settings:"
+      echo -e "$green[eFa-NG]$clean Trusted Network Settings:"
       echo -e ""
-      echo -e "$green[eFa]$clean Trusted networks are networks from which you want to accept"
-      echo -e "$green[eFa]$clean spam submissions via the \"Click here to report this message as spam\""
-      echo -e "$green[eFa]$clean link. All other networks will be redirected to the login page"
+      echo -e "$green[eFa-NG]$clean Trusted networks are networks from which you want to accept"
+      echo -e "$green[eFa-NG]$clean spam submissions via the \"Click here to report this message as spam\""
+      echo -e "$green[eFa-NG]$clean link. All other networks will be redirected to the login page"
       echo -e ""
 
       local RULES
@@ -36,7 +36,7 @@ function func_ask-trustednets() {
       echo -e ""
       echo -e "e) Return to main menu"
       echo -e ""
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -169,7 +169,7 @@ function func_ask-trustednets() {
                 ;;
                 *)  
                 echo -e "Error \"$choice\" is not an option..." && pause
-                echo -e -n "$green[eFa]$clean : "
+                echo -e -n "$green[eFa-NG]$clean : "
                 ;;
       esac
     done

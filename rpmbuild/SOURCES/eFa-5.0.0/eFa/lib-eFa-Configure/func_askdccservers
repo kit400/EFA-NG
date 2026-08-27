@@ -4,12 +4,12 @@
 
 function func_ask-dccservers() {
   func_echo-header
-  echo -e "$green[eFa]$clean - Set DCC Server Pools"
+  echo -e "$green[eFa-NG]$clean - Set DCC Server Pools"
   echo -e ""
-  echo -e "$green[eFa]$clean This option will allow you to set the DCC server"
-  echo -e "$green[eFa]$clean pools that you want to use."
-  echo -e "$green[eFa]$clean The dcc-servers.net pool is limited use and what ships with dcc."
-  echo -e "$green[eFa]$clean Choice of pool may affect performance, depending on your location"
+  echo -e "$green[eFa-NG]$clean This option will allow you to set the DCC server"
+  echo -e "$green[eFa-NG]$clean pools that you want to use."
+  echo -e "$green[eFa-NG]$clean The dcc-servers.net pool is limited use and what ships with dcc."
+  echo -e "$green[eFa-NG]$clean Choice of pool may affect performance, depending on your location"
   echo -e ""
   DCCPOOL=$(grep DCCPOOL /etc/eFa/eFa-Config | sed -e 's/.*://')
   echo -e "Current DCC Pool: $DCCPOOL"
@@ -22,7 +22,7 @@ function func_ask-dccservers() {
       echo -e ""
       echo -e "e) Return to main menu"
       echo -e ""
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -34,7 +34,7 @@ function func_ask-dccservers() {
                     /usr/bin/cdcc "add dcc4.dcc-servers.net"
                     /usr/bin/cdcc "add dcc5.dcc-servers.net"
                     sed -i '/^DCCPOOL:/ c\DCCPOOL:default' /etc/eFa/eFa-Config
-                    echo -e "$green[eFa]$clean DCC Pool set to default"
+                    echo -e "$green[eFa-NG]$clean DCC Pool set to default"
                     pause
                     return ;;
                 e) return ;;

@@ -3,10 +3,10 @@
 # +---------------------------------------------------+
 func_maxmind(){
   func_echo-header
-  echo -e "$green[eFa]$clean Add a MaxMind GeoLite2 License Key"
+  echo -e "$green[eFa-NG]$clean Add a MaxMind GeoLite2 License Key"
   echo -e ""
-  echo -e "$green[eFa]$clean Due to new regulations, MaxMind requires a free license key" 
-  echo -e "$green[eFa]$clean Visit www.maxmind.com to set up and account and generate a key"
+  echo -e "$green[eFa-NG]$clean Due to new regulations, MaxMind requires a free license key" 
+  echo -e "$green[eFa-NG]$clean Visit www.maxmind.com to set up and account and generate a key"
   echo ""
   CURLICENSE=$(grep "^define('MAXMIND_LICENSE_KEY'" /var/www/html/mailscanner/conf.php | awk -F"'" '{print $4}')
   if [[ -z $CURLICENSE ]]; then
@@ -15,7 +15,7 @@ func_maxmind(){
      echo -e "Current License Key: $CURLICENSE"
   fi
   echo ""
-  echo -e -n "$green[eFa]$clean Please enter your MaxMind License Key (c to cancel): "
+  echo -e -n "$green[eFa-NG]$clean Please enter your MaxMind License Key (c to cancel): "
   read LICENSE
   FLAG=1
   while [ $FLAG != "0" ]
@@ -23,13 +23,13 @@ func_maxmind(){
       if [[ $LICENSE =~ ^([0-9A-Za-z]{12}|[0-9A-Za-z]{16}|[0-9A-Za-z_]{40})$ ]]; then
           sed -i "/^\/\/ define('MAXMIND_LICENSE_KEY'/ c\define('MAXMIND_LICENSE_KEY','');" /var/www/html/mailscanner/conf.php
           sed -i "/^define('MAXMIND_LICENSE_KEY'/ c\define('MAXMIND_LICENSE_KEY', '$LICENSE');" /var/www/html/mailscanner/conf.php
-          echo -e "$green[eFa]$clean Maxmind License Key installed"
+          echo -e "$green[eFa-NG]$clean Maxmind License Key installed"
           FLAG=0
       elif [[ $LICENSE =~ ^[cC]$ ]]; then
           FLAG=0
       else
           echo -e "       $red ERROR: Invalid entry.$clean"
-          echo -e -n "$green[eFa]$clean Please enter your MaxMind License Key (c to cancel): "
+          echo -e -n "$green[eFa-NG]$clean Please enter your MaxMind License Key (c to cancel): "
           read LICENSE
       fi
   done

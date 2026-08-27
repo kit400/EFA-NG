@@ -12,15 +12,15 @@ function func_dkim-dmarc() {
   local menu
 
   echo -e ""
-  echo -e "$green[eFa]$clean Welcome to the DKIM and DMARC wizard!"
-  echo -e "$green[eFa]$clean This option is enabled by default for new builds"
-  echo -e "$green[eFa]$clean The following questions will be used to"
-  echo -e "$green[eFa]$clean enable/disable/modify a DKIM and DMARC deployment."
+  echo -e "$green[eFa-NG]$clean Welcome to the DKIM and DMARC wizard!"
+  echo -e "$green[eFa-NG]$clean This option is enabled by default for new builds"
+  echo -e "$green[eFa-NG]$clean The following questions will be used to"
+  echo -e "$green[eFa-NG]$clean enable/disable/modify a DKIM and DMARC deployment."
   echo -e ""
 
   menu=1
 
-  echo -e -n "$green[eFa]$clean Would you like to enable DMARC and DKIM functionality? [Y/n/c]: "
+  echo -e -n "$green[eFa-NG]$clean Would you like to enable DMARC and DKIM functionality? [Y/n/c]: "
   read TMPOPT
   while [ $menu -eq 1 ]; do
     if [[ $TMPOPT =~ ^[Yy]$ || -z $TMPOPT ]]; then
@@ -134,7 +134,7 @@ function func_dkim-dmarc() {
     else
       echo ""
       echo "Invalid option..."
-      echo -e -n "$green[eFa]$clean Would you like to enable DMARC and DKIM functionality? [Y/n/c]: "
+      echo -e -n "$green[eFa-NG]$clean Would you like to enable DMARC and DKIM functionality? [Y/n/c]: "
       read TMPOPT
     fi
   done

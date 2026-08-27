@@ -94,7 +94,7 @@ show_menu() {
       echo -e "7) Mail Settings                      17) Webmin"
       echo -e "8) Spam Settings                      18) Fail2Ban"
       echo -e "9) MariaDB Recovery                   19) Auto-Backup settings"
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -138,7 +138,7 @@ func_reboot() {
       echo -e "Y)  Yes I am sure"
       echo -e "N)  No no no take me back!"
       echo -e ""
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -165,7 +165,7 @@ func_halt() {
       echo -e "Y)  Yes I am sure"
       echo -e "N)  No no no take me back!"
       echo -e ""
-      echo -e -n "$green[eFa]$clean : "
+      echo -e -n "$green[eFa-NG]$clean : "
       local choice
       read choice
       case $choice in
@@ -266,8 +266,8 @@ pause(){
 func_echo-header(){
   clear
   echo -e "--------------------------------------------------------------"
-  echo -e "---        Welcome to the eFa Configuration program        ---"
-  echo -e "---               https://www.efa-project.org              ---"
+  echo -e "---       Welcome to the EFA-NG Configuration program      ---"
+  echo -e "---                 https://efa-ng.space.ua                ---"
   echo -e "--------------------------------------------------------------"
   echo ""
 }
@@ -293,7 +293,7 @@ if [ `whoami` == root ]
             show_menu
         done
     else
-        echo -e "$red [eFa] ERROR: Please become root.$clean"
+        echo -e "$red [eFa-NG] ERROR: Please become root.$clean"
         exit 0
     fi
 # +---------------------------------------------------+

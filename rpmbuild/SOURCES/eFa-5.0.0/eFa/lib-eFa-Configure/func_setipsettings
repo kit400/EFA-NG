@@ -136,7 +136,7 @@ func_setipsettings(){
     echo -e ""
     echo -e "Hostname or domainname changed.  Note that you may need to generate new SSL certificates to match the new hostname"
     echo -e ""
-    echo -e "$red [eFa] Your system will now reboot. Press any key to continue. $clean"
+    echo -e "$red [eFa-NG] Your system will now reboot. Press any key to continue. $clean"
     pause
     reboot
   fi

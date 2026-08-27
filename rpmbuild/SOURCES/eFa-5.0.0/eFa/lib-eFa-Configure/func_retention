@@ -3,14 +3,14 @@
 # +---------------------------------------------------+
 func_retention() {
   func_echo-header
-  echo -e "$green[eFa]$clean - Quarantine Retention"
+  echo -e "$green[eFa-NG]$clean - Quarantine Retention"
   echo -e ""
-  echo -e "$green[eFa]$clean This option will set the number of days to retain the quarantine"
+  echo -e "$green[eFa-NG]$clean This option will set the number of days to retain the quarantine"
   echo -e ""
   RETENTION=$(grep "^define('RECORD_DAYS_TO_KEEP'" /var/www/html/mailscanner/conf.php | awk -F' ' '{print $2}' | awk -F')' '{print $1}')
-  echo -e "$green[eFa]$clean Current retention (days): $RETENTION"
+  echo -e "$green[eFa-NG]$clean Current retention (days): $RETENTION"
 
-  echo -en "$green[eFa]$clean Enter the number of days to retain messages in quarantine (1-999): "
+  echo -en "$green[eFa-NG]$clean Enter the number of days to retain messages in quarantine (1-999): "
   read NEWRETENTION
 
   FLAG=1
@@ -21,12 +21,12 @@ func_retention() {
       sed -i "/^define('QUARANTINE_DAYS_TO_KEEP'/ c\define('QUARANTINE_DAYS_TO_KEEP', $NEWRETENTION);" /var/www/html/mailscanner/conf.php
       sed -i "/^q_days=/ c\q_days=$NEWRETENTION" /etc/MailScanner/defaults
       echo -e ""
-      echo -e "$green[eFa]$clean Retention set to $NEWRETENTION days to keep."
+      echo -e "$green[eFa-NG]$clean Retention set to $NEWRETENTION days to keep."
       echo -e ""
       FLAG=0
     else
       echo -e "$red[ERROR]$clean Invalid input"
-      echo -en "$green[eFa]$clean Enter the number of days to retain messages in quarantine (1-999): "
+      echo -en "$green[eFa-NG]$clean Enter the number of days to retain messages in quarantine (1-999): "
       read NEWRETENTION
     fi
   done
