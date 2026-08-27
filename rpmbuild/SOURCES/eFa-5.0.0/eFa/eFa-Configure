@@ -405,7 +405,7 @@ func_tui_menu() {
       "10" "Apache & HTTPS Settings" \
       "11" "Virus & Clean Delivery Settings" \
       "12" "System Backup & Restore" \
-      "13" "⚡ System & Package Update" \
+      "13" "Update System & Packages" \
       "14" "Maintenance Mode Toggle" \
       "15" "Let's Encrypt SSL Certificates" \
       "16" "DKIM and DMARC Wizard" \
