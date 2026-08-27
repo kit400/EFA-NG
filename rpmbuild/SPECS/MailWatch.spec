@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.4
 Epoch:         1
-Release:       3.eFa%{?dist}
+Release:       4.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -97,6 +97,11 @@ chgrp apache %{_localstatedir}/www/html/mailscanner/images 2>/dev/null || true
 chgrp apache %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 chmod 0775 %{_localstatedir}/www/html/mailscanner/images 2>/dev/null || true
 chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
+
+# Check and initialize GeoIP database if missing or outdated (< 10MB)
+if [ ! -f %{_localstatedir}/www/html/mailscanner/temp/ip-geo.mmdb ] || [ $(stat -c%s %{_localstatedir}/www/html/mailscanner/temp/ip-geo.mmdb 2>/dev/null || echo 0) -lt 10000000 ]; then
+    /usr/bin/php %{_localstatedir}/www/html/mailscanner/tools/update_geoip.php >/dev/null 2>&1 || true
+fi
 
 %clean
 %{__rm} -rf %{buildroot}

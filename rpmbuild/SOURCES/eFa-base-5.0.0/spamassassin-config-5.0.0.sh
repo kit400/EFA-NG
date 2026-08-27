@@ -32,11 +32,19 @@ echo "Configuring spamassassin..."
 # Symlink spamassassin.conf (previously handled by tarball)
 ln -s -f /etc/MailScanner/spamassassin.conf /etc/mail/spamassassin/mailscanner.cf
 
-# Symlink for Geo::IP
+# Symlink for Geo::IP (prefer strato-do/ip-geo database)
 rm -f /usr/share/GeoIP/GeoLiteCountry.dat
 rm -f /usr/share/GeoIP/GeoLite2-City.mmdb
-mv /usr/share/GeoIP/GeoLite2-Country.mmdb /var/www/html/mailscanner/temp/GeoLite2-Country.mmdb
-ln -s /var/www/html/mailscanner/temp/GeoLite2-Country.mmdb /usr/share/GeoIP/GeoLite2-Country.mmdb
+if [ -f /var/www/html/mailscanner/tools/update_geoip.php ]; then
+    /usr/bin/php /var/www/html/mailscanner/tools/update_geoip.php >/dev/null 2>&1 || true
+fi
+if [ -f /var/www/html/mailscanner/temp/ip-geo.mmdb ]; then
+    ln -sf /var/www/html/mailscanner/temp/ip-geo.mmdb /usr/share/GeoIP/ip-geo.mmdb
+    ln -sf /var/www/html/mailscanner/temp/ip-geo.mmdb /usr/share/GeoIP/GeoLite2-Country.mmdb
+elif [ -f /usr/share/GeoIP/GeoLite2-Country.mmdb ]; then
+    mv /usr/share/GeoIP/GeoLite2-Country.mmdb /var/www/html/mailscanner/temp/GeoLite2-Country.mmdb
+    ln -sf /var/www/html/mailscanner/temp/GeoLite2-Country.mmdb /usr/share/GeoIP/GeoLite2-Country.mmdb
+fi
 
 # PDFInfo (now included in SA 3.4.1)
 sed -i "/^# loadplugin Mail::SpamAssassin::Plugin::PDFInfo$/ c\loadplugin Mail::SpamAssassin::Plugin::PDFInfo" /etc/mail/spamassassin/v341.pre
