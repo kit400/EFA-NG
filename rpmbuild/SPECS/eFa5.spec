@@ -282,7 +282,7 @@ Requires:  sqlgrey >= 1:1.8.0-8
     # sqlgrey                                    # eFa       # Greylisting
 Requires: sqlgreywebinterface >= 1:1.1.9-5
     # sqlgreywebinterrface                       # eFa       # mailwatch
-Requires:  MailWatch >= 1:1.2.23-4
+Requires:  MailWatch >= 1:6.0.4-1
     # MailWatch                                  # eFa     # MailWatch Frontend
 Requires:  spamassassin >= 4.0.1-2
     # spamassassin                               # eFa     # MailScanner
@@ -502,7 +502,8 @@ if [ "$1" = "1" ]; then
         /bin/sh %{_usrsrc}/eFa/eFa-config-5.0.0.sh
         /bin/sh %{_usrsrc}/eFa/eFaInit-config-5.0.0.sh
 
-        echo "eFa-%{version}-%{releasenum}" > %{_sysconfdir}/eFa-Version
+        echo "%{version}" > %{_sysconfdir}/eFa-Version
+        echo "eFa-%{version}" > %{_sysconfdir}/EFA-Version
         echo "Build completed!"
     fi
 fi
@@ -518,7 +519,8 @@ if [[ "$1" == "2" || "$flag" == "1" ]]; then
        
     # cleanup if sucessful
     rm -rf /usr/src/eFa
-    echo "eFa-%{version}-%{releasenum}" > %{_sysconfdir}/eFa-Version
+    echo "%{version}" > %{_sysconfdir}/eFa-Version
+    echo "eFa-%{version}" > %{_sysconfdir}/EFA-Version
 
     echo "Update completed successfully!"
 fi
