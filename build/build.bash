@@ -248,11 +248,13 @@ logthis "Checking and removing conflicting packages"
 logthis "Installing EFA-NG packages (this may take several minutes)..."
 if ! rpm -q eFa >/dev/null 2>&1 && ! rpm -q efa-ng >/dev/null 2>&1; then
     if [[ "$action" != "testingnoefa" && "$action" != "devnoefa" ]]; then
-        dnf -y install eFa | tee -a "$LOGFILE"
-        if [ $? -ne 0 ]; then
-            dnf -y install efa-ng | tee -a "$LOGFILE"
+        dnf -y install eFa 2>&1 | tee -a "$LOGFILE"
+        INSTALL_STATUS=${PIPESTATUS[0]}
+        if [ $INSTALL_STATUS -ne 0 ]; then
+            dnf -y install efa-ng 2>&1 | tee -a "$LOGFILE"
+            INSTALL_STATUS=${PIPESTATUS[0]}
         fi
-        if [ $? -eq 0 ]; then
+        if [ $INSTALL_STATUS -eq 0 ]; then
             logthis "EFA-NG installed successfully"
         else
             logthis "ERROR: EFA-NG package installation encountered errors"
