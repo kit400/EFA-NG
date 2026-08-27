@@ -243,6 +243,16 @@ logthis "Checking and removing conflicting packages"
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
+# Pre-configure system groups and spool directories for clean installation
+#-----------------------------------------------------------------------------#
+logthis "Preparing system groups and spool directories..."
+getent group mtagroup >/dev/null 2>&1 || groupadd -r mtagroup 2>/dev/null || true
+getent group virusgroup >/dev/null 2>&1 || groupadd -r virusgroup 2>/dev/null || true
+command -v systemd-sysusers >/dev/null 2>&1 && systemd-sysusers 2>/dev/null || true
+mkdir -p /var/spool/postfix/{hold,incoming,private,public} 2>/dev/null || true
+#-----------------------------------------------------------------------------#
+
+#-----------------------------------------------------------------------------#
 # Install EFA-NG
 #-----------------------------------------------------------------------------#
 logthis "Installing EFA-NG packages (this may take several minutes)..."
@@ -256,6 +266,13 @@ if ! rpm -q eFa >/dev/null 2>&1 && ! rpm -q efa-ng >/dev/null 2>&1; then
         fi
         if [ $INSTALL_STATUS -eq 0 ]; then
             logthis "EFA-NG installed successfully"
+            # Finalize sysusers and queue permissions
+            command -v systemd-sysusers >/dev/null 2>&1 && systemd-sysusers 2>/dev/null || true
+            mkdir -p /var/spool/postfix/{hold,incoming} 2>/dev/null || true
+            chown -R postfix:mtagroup /var/spool/postfix/hold 2>/dev/null || true
+            chown -R postfix:mtagroup /var/spool/postfix/incoming 2>/dev/null || true
+            chmod -R 750 /var/spool/postfix/hold 2>/dev/null || true
+            chmod -R 750 /var/spool/postfix/incoming 2>/dev/null || true
         else
             logthis "ERROR: EFA-NG package installation encountered errors"
             logthis "Please check $LOGFILE for detailed logs."
