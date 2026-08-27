@@ -75,7 +75,7 @@ function func_https() {
 
         flag=1
       elif [[ $TMPSECURE == "c" || $TMPSECURE == "C" ]]; then
-        echo -e "$green[EFA]$clean No action taken, exiting."
+        echo -e "$green[eFa-NG]$clean No action taken, exiting."
         pause
         flag=1
       else

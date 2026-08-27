@@ -182,11 +182,38 @@ func_halt() {
 # Update Now function
 # +---------------------------------------------------+
 func_update-now() {
+  func_echo-header
+  echo -e "$green[eFa-NG]$clean - System & Package Update"
   echo ""
-  local yesno
-  read -p "Update now, are you sure? (y/N): " yesno
-  if [[ $yesno =~ ^[Yy] ]]; then
-    yum -y update
+  echo -e "Checking for available package updates..."
+  echo ""
+  dnf --refresh check-update
+  local dnf_status=$?
+  if [ $dnf_status -eq 0 ]; then
+    echo ""
+    echo -e "$green[eFa-NG]$clean All packages are up to date."
+    echo ""
+  elif [ $dnf_status -eq 100 ]; then
+    echo ""
+    echo -e "$yellow[eFa-NG]$clean Updates are available for this system.$clean"
+    echo ""
+    local yesno
+    read -p "Do you want to apply updates now? (y/N): " yesno
+    if [[ $yesno =~ ^[Yy] ]]; then
+      echo ""
+      echo -e "$green[eFa-NG]$clean Updating system packages..."
+      dnf -y update
+      echo ""
+      echo -e "$green[eFa-NG]$clean Reloading web and mail services..."
+      systemctl reload php-fpm httpd 2>/dev/null || true
+      systemctl reload postfix 2>/dev/null || true
+      echo ""
+      echo -e "$green[eFa-NG]$clean System update completed successfully!"
+    else
+      echo -e "$green[eFa-NG]$clean Update cancelled."
+    fi
+  else
+    echo -e "$red[eFa-NG] An error occurred while checking for updates.$clean"
   fi
   pause
 }

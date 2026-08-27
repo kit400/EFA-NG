@@ -305,7 +305,7 @@ func_adminemail(){
            read -p "> " ADMINEMAIL
            sed -i "/ADMINEMAIL\:/ c\ADMINEMAIL\:$ADMINEMAIL" /etc/eFa/eFa-Config
 
-           Issue #73 Admin Email Change Fails to Update MailScanner Values
+           # Issue #73 Admin Email Change Fails to Update MailScanner Values
            sed -i "/^Unscanned Header Value =/ c\Unscanned Header Value = Please contact $ADMINEMAIL for details" /etc/MailScanner/MailScanner.conf
            sed -i "/^Information Header Value =/ c\Information Header Value = Please contact $ADMINEMAIL for more information" /etc/MailScanner/MailScanner.conf
            sed -i "/^root:/ c\root: $ADMINEMAIL" /etc/aliases

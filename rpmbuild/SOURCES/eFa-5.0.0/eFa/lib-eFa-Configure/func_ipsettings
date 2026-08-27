@@ -88,7 +88,7 @@ func_ip-settings(){
                     ;;
                 4)  echo ""
                     read -p "Enter your new netmask length: " ASKNM4
-                    if [[ -n "$ASKNM4" && $ASKNM4 -ge 1 && $ASKNM4 -le 32 ]]; then echo "ERROR invalid netmask length" && pause; else
+                    if [[ -z "$ASKNM4" || $ASKNM4 -lt 1 || $ASKNM4 -gt 32 ]]; then echo "ERROR invalid netmask length" && pause; else
                       NM4=$ASKNM4
                     fi
                     ;;
