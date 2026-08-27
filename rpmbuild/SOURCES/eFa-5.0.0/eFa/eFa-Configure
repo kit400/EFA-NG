@@ -278,15 +278,6 @@ func_dispatch_choice() {
   esac
 }
 
-# Service status helper for Modern Dashboard
-badge() {
-  if [ "$1" == "active" ]; then
-    printf "${green}● OK   ${clean}"
-  else
-    printf "${red}○ OFF  ${clean}"
-  fi
-}
-
 # Modern Dashboard Menu
 show_modern_menu() {
   local host=$(hostname -f 2>/dev/null || hostname)
@@ -295,48 +286,69 @@ show_modern_menu() {
   local load=$(awk '{print $1", "$2", "$3}' /proc/loadavg 2>/dev/null)
   local mem=$(free -m 2>/dev/null | awk '/Mem:/ {printf "%.1fG / %.1fG", $3/1024, $2/1024}')
 
-  local s_postfix=$(badge $(systemctl is-active postfix 2>/dev/null))
-  local s_ms=$(badge $(systemctl is-active mailscanner 2>/dev/null))
-  local s_maria=$(badge $(systemctl is-active mariadb 2>/dev/null))
-  local s_phpfpm=$(badge $(systemctl is-active php-fpm 2>/dev/null))
-  local s_httpd=$(badge $(systemctl is-active httpd 2>/dev/null))
-  local s_f2b=$(badge $(systemctl is-active fail2ban 2>/dev/null))
-  local s_maint
-  [[ -f /etc/cron.d/eFa-Monitor.cron ]] && s_maint="${green}○ Normal  ${clean}" || s_maint="${yellow}⚠ Active  ${clean}"
-  local s_bk
-  [[ -f /etc/eFa/eFa-Backup.disabled ]] && s_bk="${yellow}○ Disabled${clean}" || s_bk="${green}● Enabled ${clean}"
+  local b_ok="${green}● OK ${clean}"
+  local b_off="${red}○ OFF${clean}"
+  local b_on="${green}● ON ${clean}"
+
+  local b_postfix=$b_off
+  [[ $(systemctl is-active postfix 2>/dev/null) == "active" ]] && b_postfix=$b_ok
+
+  local b_ms=$b_off
+  [[ $(systemctl is-active mailscanner 2>/dev/null) == "active" ]] && b_ms=$b_ok
+
+  local b_maria=$b_off
+  [[ $(systemctl is-active mariadb 2>/dev/null) == "active" ]] && b_maria=$b_ok
+
+  local b_phpfpm=$b_off
+  [[ $(systemctl is-active php-fpm 2>/dev/null) == "active" ]] && b_phpfpm=$b_ok
+
+  local b_httpd=$b_off
+  [[ $(systemctl is-active httpd 2>/dev/null) == "active" ]] && b_httpd=$b_ok
+
+  local b_f2b=$b_off
+  [[ $(systemctl is-active fail2ban 2>/dev/null) == "active" ]] && b_f2b=$b_ok
+
+  local b_maint="${green}○ OFF${clean}"
+  [[ ! -f /etc/cron.d/eFa-Monitor.cron ]] && b_maint="${yellow}⚠ ON ${clean}"
+
+  local b_bk="${green}● ON ${clean}"
+  [[ -f /etc/eFa/eFa-Backup.disabled ]] && b_bk="${yellow}○ OFF${clean}"
+
+  local b_upd=$b_ok
 
   clear
-  echo -e "${cyan}┌──────────────────────────────────────────────────────────────────────────┐${clean}"
-  echo -e "${cyan}│${clean}                       ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                       ${cyan}│${clean}"
-  echo -e "${cyan}│${clean}                         https://efa-ng.space.ua                          ${cyan}│${clean}"
-  echo -e "${cyan}├──────────────────────────────────────────────────────────────────────────┤${clean}"
-  printf "${cyan}│${clean} Host   : %-37s Version: %-14s ${cyan}│${clean}\n" "$host ($ip)" "$eFaVERSION"
-  printf "${cyan}│${clean} Uptime : %-28s Load: %-10s Mem: %-12s ${cyan}│${clean}\n" "$uptime_str" "$load" "$mem"
-  echo -e "${cyan}├──────────────────────────────────────────────────────────────────────────┤${clean}"
-  echo -e "${cyan}│${clean} ${bold}SERVICES:${clean}                                                                ${cyan}│${clean}"
-  echo -e "${cyan}│${clean}  Postfix : $s_postfix  MailScanner : $s_ms  MariaDB : $s_maria  PHP-FPM: $s_phpfpm ${cyan}│${clean}"
-  echo -e "${cyan}│${clean}  Apache  : $s_httpd  Fail2Ban    : $s_f2b  Backup  : $s_bk  Maint. : $s_maint ${cyan}│${clean}"
-  echo -e "${cyan}└──────────────────────────────────────────────────────────────────────────┘${clean}"
+  echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+  echo -e " ${cyan}│${clean}                      ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                      ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}                        https://efa-ng.space.ua                         ${cyan}│${clean}"
+  echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+  printf " ${cyan}│${clean}   Host   : %-42.42s Version: %-6.6s   ${cyan}│${clean}\n" "$host ($ip)" "$eFaVERSION"
+  printf " ${cyan}│${clean}   Uptime : %-30.30s Load   : %-16.16s   ${cyan}│${clean}\n" "$uptime_str" "$load"
+  printf " ${cyan}│${clean}   Memory : %-30.30s Mode   : %-16.16s   ${cyan}│${clean}\n" "$mem" "Modern Dashboard"
+  echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+  echo -e " ${cyan}│${clean}   ${bold}SERVICES:${clean}                                                            ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}   Postfix: [$b_postfix]       MailScanner: [$b_ms]       MariaDB: [$b_maria]   ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}   Apache : [$b_httpd]       Fail2Ban   : [$b_f2b]       PHP-FPM: [$b_phpfpm]   ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}   Backup : [$b_bk]       Maintenance: [$b_maint]       Updates: [$b_upd]   ${cyan}│${clean}"
+  echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
   echo ""
-  echo -e " ${bold}┌─ SYSTEM & NETWORK ───────────────┐   ┌─ MAIL & FILTERING ────────────────┐${clean}"
-  echo -e " ${bold}│${clean}  1) Shell Access (Bash)          ${bold}│   │${clean}  6) MailWatch Settings             ${bold}│${clean}"
-  echo -e " ${bold}│${clean}  2) Reboot System                ${bold}│   │${clean}  7) Mail Settings (Relay/Domains)  ${bold}│${clean}"
-  echo -e " ${bold}│${clean}  3) Halt / Power Off             ${bold}│   │${clean}  8) Spam Filter Settings           ${bold}│${clean}"
-  echo -e " ${bold}│${clean}  4) IP & DNS Settings            ${bold}│   │${clean} 11) Virus & Clean Delivery         ${bold}│${clean}"
-  echo -e " ${bold}│${clean}  5) System Tunables              ${bold}│   │${clean} 16) DKIM and DMARC Wizard          ${bold}│${clean}"
-  echo -e " ${bold}└──────────────────────────────────┘   └───────────────────────────────────┘${clean}"
-  echo -e " ${bold}┌─ SECURITY & ACCESS ──────────────┐   ┌─ MAINTENANCE & TOOLS ─────────────┐${clean}"
-  echo -e " ${bold}│${clean} 10) Apache & HTTPS Settings      ${bold}│   │${clean}  9) MariaDB Database Recovery      ${bold}│${clean}"
-  echo -e " ${bold}│${clean} 15) Let's Encrypt SSL Certs      ${bold}│   │${clean} 12) System Backup & Restore        ${bold}│${clean}"
-  echo -e " ${bold}│${clean} 17) Webmin Control Panel         ${bold}│   │${clean} 13) ⚡ System & Package Update      ${bold}│${clean}"
-  echo -e " ${bold}│${clean} 18) Fail2Ban Protection          ${bold}│   │${clean} 14) Maintenance Mode (Toggle)      ${bold}│${clean}"
-  echo -e " ${bold}│${clean}                                  ${bold}│   │${clean} 19) Auto-Backup Settings           ${bold}│${clean}"
-  echo -e " ${bold}└──────────────────────────────────┘   └───────────────────────────────────┘${clean}"
+  echo -e " ${bold}┌─ SYSTEM & NETWORK ───────────────┐  ┌─ MAIL & FILTERING ───────────────┐${clean}"
+  echo -e " ${bold}│${clean}  1) Shell Access (Bash)          ${bold}│  │${clean}  6) MailWatch Settings           ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  2) Reboot System                ${bold}│  │${clean}  7) Mail Settings (Domains/Relay)${bold}│${clean}"
+  echo -e " ${bold}│${clean}  3) Halt / Power Off             ${bold}│  │${clean}  8) Spam Filter Settings         ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  4) IP & DNS Settings            ${bold}│  │${clean} 11) Virus & Clean Delivery       ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  5) System Tunables              ${bold}│  │${clean} 16) DKIM and DMARC Wizard        ${bold}│${clean}"
+  echo -e " ${bold}└──────────────────────────────────┘  └──────────────────────────────────┘${clean}"
+  echo -e " ${bold}┌─ SECURITY & ACCESS ──────────────┐  ┌─ MAINTENANCE & TOOLS ────────────┐${clean}"
+  echo -e " ${bold}│${clean} 10) Apache & HTTPS Settings      ${bold}│  │${clean}  9) MariaDB Database Recovery    ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 15) Let's Encrypt SSL Certs      ${bold}│  │${clean} 12) System Backup & Restore      ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 17) Webmin Control Panel         ${bold}│  │${clean} 13) Update System & Packages     ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 18) Fail2Ban Protection          ${bold}│  │${clean} 14) Maintenance Mode (Toggle)    ${bold}│${clean}"
+  echo -e " ${bold}│${clean}                                  ${bold}│  │${clean} 19) Auto-Backup Settings         ${bold}│${clean}"
+  echo -e " ${bold}└──────────────────────────────────┘  └──────────────────────────────────┘${clean}"
   echo ""
-  echo -e "  ${bold}0)${clean} Logout (SSH)      ${bold}M)${clean} Switch UI Mode (Classic/TUI)      ${bold}R)${clean} Refresh"
+  echo -e "   ${bold}0)${clean} Logout (SSH)      ${bold}M)${clean} Switch UI Mode (Classic/TUI)      ${bold}R)${clean} Refresh"
   echo ""
-  echo -e -n "$green[eFa-NG]$clean : "
+  echo -e -n " ${green}[eFa-NG]${clean} : "
   local choice
   read choice || exit 0
   func_dispatch_choice "$choice"
