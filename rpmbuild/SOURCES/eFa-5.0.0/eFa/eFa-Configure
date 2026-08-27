@@ -1,9 +1,9 @@
 #!/bin/bash
 # +--------------------------------------------------------------------+
-# eFa-Configure
-# Version 20181224
+# EFA-NG Configure
+# Version 20260827
 # +--------------------------------------------------------------------+
-# Copyright (C) 2012~2021  https://www.efa-project.org
+# Copyright (C) 2026  https://efa-ng.space.ua
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,15 +19,9 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # +--------------------------------------------------------------------+
 
-# +---------------------------------------------------+
-# Enable Extended Globs
-# +---------------------------------------------------+
 shopt -s extglob
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
 # Load functions
-# +---------------------------------------------------+
 . /var/eFa/lib/eFa-Configure/func_getipsettings
 . /var/eFa/lib/eFa-Configure/func_apachesettings
 . /var/eFa/lib/eFa-Configure/func_mailsettings
@@ -63,124 +57,45 @@ shopt -s extglob
 . /var/eFa/lib/eFa-Configure/func_asksigrules
 . /var/eFa/lib/eFa-Configure/func_trustednetworks
 
-# +---------------------------------------------------+
+# Configuration & UI mode
+CONFIG_FILE="/etc/eFa/eFa-Configure.conf"
+if [ -f "$CONFIG_FILE" ]; then
+  . "$CONFIG_FILE"
+fi
+UI_MODE="${UI_MODE:-modern}"
 
-# +---------------------------------------------------+
+# Colors
+red='\E[00;31m'
+green='\E[00;32m'
+yellow='\E[00;33m'
+blue='\E[00;34m'
+magenta='\E[00;35m'
+cyan='\E[00;36m'
+bold='\E[1m'
+dim='\E[2m'
+clean='\E[00m'
+
 # Get version
-# +---------------------------------------------------+
-eFaVERSION="`head /etc/eFa-Version`"
-# +---------------------------------------------------+
+eFaVERSION="$(head -n 1 /etc/eFa-Version 2>/dev/null || echo '6.0.4')"
 
-# +---------------------------------------------------+
-# Display menus
-# +---------------------------------------------------+
-show_menu() {
-  menu=1
-  while [ $menu == "1" ]
-    do
-      func_echo-header
-      echo -e ""
-      echo -e "You are currently running $green$eFaVERSION$clean."
-      echo -e ""
-      echo -e "Please choose an option:"
-      echo -e " "
-      echo -e "0) Logout from ssh                    10) Apache Settings"
-      echo -e "1) Shell                              11) Virus Settings"
-      echo -e "2) Reboot system                      12) System Restore"
-      echo -e "3) Halt system                        13) Update Now"
-      echo -e "4) IP Settings                        14) Maintenance Mode"
-      echo -e "5) Tunables                           15) Let's Encrypt"
-      echo -e "6) MailWatch Settings                 16) DKIM and DMARC"
-      echo -e "7) Mail Settings                      17) Webmin"
-      echo -e "8) Spam Settings                      18) Fail2Ban"
-      echo -e "9) MariaDB Recovery                   19) Auto-Backup settings"
-      echo -e -n "$green[eFa-NG]$clean : "
-      local choice
-      read choice
-      case $choice in
-                    0) clear; SSHTTY=`/usr/bin/tty |awk -F '/' '{print $3"/"$4}'`; SSHPID=`ps aux | egrep "sshd: [a-zA-Z]+@" | grep -w $SSHTTY | awk '{print $2}'`; kill $SSHPID ;;
-                    1) exit 0 ;;
-                    2) func_reboot ;;
-                    3) func_halt ;;
-                    4) func_ip-settings ;;
-                    5) func_tunables ;;
-                    6) func_mailwatch-settings ;;
-                    7) func_mail-settings ;;
-                    8) func_spam-settings ;;
-                    9) func_recover-mariadb ;;
-                   10) func_apache-settings ;;
-                   11) func_virus-settings ;;
-                   12) func_system-restore ;;
-                   13) func_update-now ;;
-                   14) func_maintenance-mode ;;
-                   15) func_lets-encrypt ;;
-                   16) func_dkim-dmarc ;;
-                   17) func_webmin ;;
-                   18) func_fail2ban ;;
-                   19) func_backup-settings ;;
-                    *) echo -e "Error \"$choice\" is not an option..." && sleep 2
-      esac
-    done
+# Trap signals
+trap '' SIGINT SIGQUIT SIGTSTP
+
+# Helper functions
+pause(){
+  read -p "Press [Enter] key to continue..." fackEnterKey || exit 0
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Reboot function
-# +---------------------------------------------------+
-func_reboot() {
-  menu=0
-  rebootmenu=1
-  while [ $rebootmenu == "1" ]
-    do
-      func_echo-header
-      echo -e "Are you sure you want to reboot this host?"
-      echo -e ""
-      echo -e "Y)  Yes I am sure"
-      echo -e "N)  No no no take me back!"
-      echo -e ""
-      echo -e -n "$green[eFa-NG]$clean : "
-      local choice
-      read choice
-      case $choice in
-                    Y) reboot && exit 0 ;;
-                    N) menu=1 && return  ;;
-                    n) menu=1 && return  ;;
-                    *) echo -e "Error \"$choice\" is not an option..." && sleep 2
-      esac
-    done
+func_echo-header(){
+  clear
+  echo -e "--------------------------------------------------------------"
+  echo -e "---       Welcome to the EFA-NG Configuration program      ---"
+  echo -e "---                 https://efa-ng.space.ua                ---"
+  echo -e "--------------------------------------------------------------"
+  echo ""
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Halt function
-# +---------------------------------------------------+
-func_halt() {
-  menu=0
-  haltmenu=1
-  while [ $haltmenu == "1" ]
-    do
-      func_echo-header
-      echo -e "Are you sure you want to halt this host?"
-      echo -e ""
-      echo -e "Y)  Yes I am sure"
-      echo -e "N)  No no no take me back!"
-      echo -e ""
-      echo -e -n "$green[eFa-NG]$clean : "
-      local choice
-      read choice
-      case $choice in
-                    Y) shutdown -h now && exit 0 ;;
-                    N) menu=1 && return  ;;
-                    n) menu=1 && return  ;;
-                    *) echo -e "Error \"$choice\" is not an option..." && sleep 2
-      esac
-    done
-}
-# +---------------------------------------------------+
-
-# +---------------------------------------------------+
 # Update Now function
-# +---------------------------------------------------+
 func_update-now() {
   func_echo-header
   echo -e "$green[eFa-NG]$clean - System & Package Update"
@@ -198,7 +113,7 @@ func_update-now() {
     echo -e "$yellow[eFa-NG]$clean Updates are available for this system.$clean"
     echo ""
     local yesno
-    read -p "Do you want to apply updates now? (y/N): " yesno
+    read -p "Do you want to apply updates now? (y/N): " yesno || yesno="n"
     if [[ $yesno =~ ^[Yy] ]]; then
       echo ""
       echo -e "$green[eFa-NG]$clean Updating system packages..."
@@ -217,110 +132,308 @@ func_update-now() {
   fi
   pause
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Function to test IP addresses
-# +---------------------------------------------------+
+# Reboot function
+func_reboot() {
+  local rebootmenu=1
+  while [ $rebootmenu -eq 1 ]; do
+    func_echo-header
+    echo -e "Are you sure you want to reboot this host?"
+    echo -e ""
+    echo -e "Y)  Yes I am sure"
+    echo -e "N)  No take me back!"
+    echo -e ""
+    echo -e -n "$green[eFa-NG]$clean : "
+    local choice
+    read choice || return
+    case $choice in
+      Y|y) reboot && exit 0 ;;
+      N|n) return ;;
+      *) echo -e "Error \"$choice\" is not an option..." && sleep 1 ;;
+    esac
+  done
+}
+
+# Halt function
+func_halt() {
+  local haltmenu=1
+  while [ $haltmenu -eq 1 ]; do
+    func_echo-header
+    echo -e "Are you sure you want to halt this host?"
+    echo -e ""
+    echo -e "Y)  Yes I am sure"
+    echo -e "N)  No take me back!"
+    echo -e ""
+    echo -e -n "$green[eFa-NG]$clean : "
+    local choice
+    read choice || return
+    case $choice in
+      Y|y) shutdown -h now && exit 0 ;;
+      N|n) return ;;
+      *) echo -e "Error \"$choice\" is not an option..." && sleep 1 ;;
+    esac
+  done
+}
+
+# IP address helpers
 function checkip4(){
   local ip=$1
   local stat=1
-
   if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-        OIFS=$IFS
-        IFS='.'
-        ip=($ip)
-        IFS=$OIFS
-        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
-        stat=$?
+    OIFS=$IFS
+    IFS='.'
+    ip=($ip)
+    IFS=$OIFS
+    [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 ]]
+    stat=$?
   fi
   return $stat
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Function to test IP addresses in CIDR notation
-# +---------------------------------------------------+
 function checkip4cidr(){
   local ip=$1
   local stat=1
-
   if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(\/[0-9]{1,2})?$ ]]; then
-        OIFS=$IFS
-        IFS='/'
-        ipcidr=($ip)
-        cidr=${ipcidr[1]}
-        ip=${ipcidr[0]}
-        IFS='.'
-        ip=($ip)
-        IFS=$OIFS
-        [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 && $cidr -lt 33 ]]
-        stat=$?
+    OIFS=$IFS
+    IFS='/'
+    ipcidr=($ip)
+    cidr=${ipcidr[1]}
+    ip=${ipcidr[0]}
+    IFS='.'
+    ip=($ip)
+    IFS=$OIFS
+    [[ ${ip[0]} -le 255 && ${ip[1]} -le 255 && ${ip[2]} -le 255 && ${ip[3]} -le 255 && $cidr -lt 33 ]]
+    stat=$?
   fi
   return $stat
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-function checkip6()
-{
-  local  ip=$1
-
+function checkip6(){
+  local ip=$1
   if [[ $ip =~ ^([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])$ ]]; then
     return 0
   fi
   return 1
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Trap CTRL+C, CTRL+Z and quit singles
-# +---------------------------------------------------+
-trap '' SIGINT SIGQUIT SIGTSTP
-# +---------------------------------------------------+
-
-# +---------------------------------------------------+
-# Pause
-# +---------------------------------------------------+
-pause(){
-  read -p "Press [Enter] key to continue..." fackEnterKey
-}
-# +---------------------------------------------------+
-
-# +---------------------------------------------------+
-# Menu header
-# +---------------------------------------------------+
-func_echo-header(){
-  clear
-  echo -e "--------------------------------------------------------------"
-  echo -e "---       Welcome to the EFA-NG Configuration program      ---"
-  echo -e "---                 https://efa-ng.space.ua                ---"
-  echo -e "--------------------------------------------------------------"
+# Switch UI Mode function
+func_switch_ui_mode() {
+  func_echo-header
+  echo -e "$cyan┌────────────────────────────────────────────────────────────┐$clean"
+  echo -e "$cyan│                   SWITCH INTERFACE MODE                    │$clean"
+  echo -e "$cyan└────────────────────────────────────────────────────────────┘$clean"
   echo ""
+  echo -e " Current Mode: $green$UI_MODE$clean"
+  echo ""
+  echo -e " 1) Modern Dashboard  - Interactive visual layout with live status"
+  echo -e " 2) Classic Menu      - Traditional 2-column numbered text menu"
+  echo -e " 3) TUI Dialog        - Fullscreen curses dialogs (whiptail)"
+  echo ""
+  echo -e " c) Cancel"
+  echo ""
+  echo -e -n "$green[eFa-NG]$clean Choose interface mode [1-3, c]: "
+  local mode_choice
+  read mode_choice || return 0
+  case $mode_choice in
+    1) UI_MODE="modern" ;;
+    2) UI_MODE="classic" ;;
+    3) UI_MODE="tui" ;;
+    *) return 0 ;;
+  esac
+  mkdir -p /etc/eFa
+  echo "UI_MODE=\"$UI_MODE\"" > "$CONFIG_FILE"
+  echo ""
+  echo -e "$green[eFa-NG]$clean Interface mode switched to $green$UI_MODE$clean and saved."
+  sleep 1
 }
-# +---------------------------------------------------+
 
-# +---------------------------------------------------+
-# Main logic
-# +---------------------------------------------------+
-clear
-red='\E[00;31m'
-green='\E[00;32m'
-yellow='\E[00;33m'
-blue='\E[00;34m'
-magenta='\E[00;35'
-cyan='\E[00;36m'
-clean='\e[00m'
+# Choice dispatcher
+func_dispatch_choice() {
+  local choice="$1"
+  case $choice in
+    0) clear; SSHTTY=`/usr/bin/tty |awk -F '/' '{print $3"/"$4}'`; SSHPID=`ps aux | egrep "sshd: [a-zA-Z]+@" | grep -w $SSHTTY | awk '{print $2}'`; kill $SSHPID ;;
+    1) exit 0 ;;
+    2) func_reboot ;;
+    3) func_halt ;;
+    4) func_ip-settings ;;
+    5) func_tunables ;;
+    6) func_mailwatch-settings ;;
+    7) func_mail-settings ;;
+    8) func_spam-settings ;;
+    9) func_recover-mariadb ;;
+    10) func_apache-settings ;;
+    11) func_virus-settings ;;
+    12) func_system-restore ;;
+    13) func_update-now ;;
+    14) func_maintenance-mode ;;
+    15) func_lets-encrypt ;;
+    16) func_dkim-dmarc ;;
+    17) func_webmin ;;
+    18) func_fail2ban ;;
+    19) func_backup-settings ;;
+    M|m) func_switch_ui_mode ;;
+    T|t) UI_MODE="tui"; func_tui_menu ;;
+    R|r) return 0 ;;
+    *) echo -e "Error \"$choice\" is not an option..." && sleep 1 ;;
+  esac
+}
 
-if [ `whoami` == root ]
-    then
-        menu="1"
-        while [ $menu == "1" ]
-        do
-            show_menu
-        done
-    else
-        echo -e "$red [eFa-NG] ERROR: Please become root.$clean"
-        exit 0
+# Service status helper for Modern Dashboard
+badge() {
+  if [ "$1" == "active" ]; then
+    printf "${green}● OK   ${clean}"
+  else
+    printf "${red}○ OFF  ${clean}"
+  fi
+}
+
+# Modern Dashboard Menu
+show_modern_menu() {
+  local host=$(hostname -f 2>/dev/null || hostname)
+  local ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+  local uptime_str=$(uptime -p 2>/dev/null | sed 's/^up //' || echo "unknown")
+  local load=$(awk '{print $1", "$2", "$3}' /proc/loadavg 2>/dev/null)
+  local mem=$(free -m 2>/dev/null | awk '/Mem:/ {printf "%.1fG / %.1fG", $3/1024, $2/1024}')
+
+  local s_postfix=$(badge $(systemctl is-active postfix 2>/dev/null))
+  local s_ms=$(badge $(systemctl is-active mailscanner 2>/dev/null))
+  local s_maria=$(badge $(systemctl is-active mariadb 2>/dev/null))
+  local s_phpfpm=$(badge $(systemctl is-active php-fpm 2>/dev/null))
+  local s_httpd=$(badge $(systemctl is-active httpd 2>/dev/null))
+  local s_f2b=$(badge $(systemctl is-active fail2ban 2>/dev/null))
+  local s_maint
+  [[ -f /etc/cron.d/eFa-Monitor.cron ]] && s_maint="${green}○ Normal  ${clean}" || s_maint="${yellow}⚠ Active  ${clean}"
+  local s_bk
+  [[ -f /etc/eFa/eFa-Backup.disabled ]] && s_bk="${yellow}○ Disabled${clean}" || s_bk="${green}● Enabled ${clean}"
+
+  clear
+  echo -e "${cyan}┌──────────────────────────────────────────────────────────────────────────┐${clean}"
+  echo -e "${cyan}│${clean}                       ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                       ${cyan}│${clean}"
+  echo -e "${cyan}│${clean}                         https://efa-ng.space.ua                          ${cyan}│${clean}"
+  echo -e "${cyan}├──────────────────────────────────────────────────────────────────────────┤${clean}"
+  printf "${cyan}│${clean} Host   : %-37s Version: %-14s ${cyan}│${clean}\n" "$host ($ip)" "$eFaVERSION"
+  printf "${cyan}│${clean} Uptime : %-28s Load: %-10s Mem: %-12s ${cyan}│${clean}\n" "$uptime_str" "$load" "$mem"
+  echo -e "${cyan}├──────────────────────────────────────────────────────────────────────────┤${clean}"
+  echo -e "${cyan}│${clean} ${bold}SERVICES:${clean}                                                                ${cyan}│${clean}"
+  echo -e "${cyan}│${clean}  Postfix : $s_postfix  MailScanner : $s_ms  MariaDB : $s_maria  PHP-FPM: $s_phpfpm ${cyan}│${clean}"
+  echo -e "${cyan}│${clean}  Apache  : $s_httpd  Fail2Ban    : $s_f2b  Backup  : $s_bk  Maint. : $s_maint ${cyan}│${clean}"
+  echo -e "${cyan}└──────────────────────────────────────────────────────────────────────────┘${clean}"
+  echo ""
+  echo -e " ${bold}┌─ SYSTEM & NETWORK ───────────────┐   ┌─ MAIL & FILTERING ────────────────┐${clean}"
+  echo -e " ${bold}│${clean}  1) Shell Access (Bash)          ${bold}│   │${clean}  6) MailWatch Settings             ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  2) Reboot System                ${bold}│   │${clean}  7) Mail Settings (Relay/Domains)  ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  3) Halt / Power Off             ${bold}│   │${clean}  8) Spam Filter Settings           ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  4) IP & DNS Settings            ${bold}│   │${clean} 11) Virus & Clean Delivery         ${bold}│${clean}"
+  echo -e " ${bold}│${clean}  5) System Tunables              ${bold}│   │${clean} 16) DKIM and DMARC Wizard          ${bold}│${clean}"
+  echo -e " ${bold}└──────────────────────────────────┘   └───────────────────────────────────┘${clean}"
+  echo -e " ${bold}┌─ SECURITY & ACCESS ──────────────┐   ┌─ MAINTENANCE & TOOLS ─────────────┐${clean}"
+  echo -e " ${bold}│${clean} 10) Apache & HTTPS Settings      ${bold}│   │${clean}  9) MariaDB Database Recovery      ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 15) Let's Encrypt SSL Certs      ${bold}│   │${clean} 12) System Backup & Restore        ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 17) Webmin Control Panel         ${bold}│   │${clean} 13) ⚡ System & Package Update      ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 18) Fail2Ban Protection          ${bold}│   │${clean} 14) Maintenance Mode (Toggle)      ${bold}│${clean}"
+  echo -e " ${bold}│${clean}                                  ${bold}│   │${clean} 19) Auto-Backup Settings           ${bold}│${clean}"
+  echo -e " ${bold}└──────────────────────────────────┘   └───────────────────────────────────┘${clean}"
+  echo ""
+  echo -e "  ${bold}0)${clean} Logout (SSH)      ${bold}M)${clean} Switch UI Mode (Classic/TUI)      ${bold}R)${clean} Refresh"
+  echo ""
+  echo -e -n "$green[eFa-NG]$clean : "
+  local choice
+  read choice || exit 0
+  func_dispatch_choice "$choice"
+}
+
+# Classic Menu
+show_classic_menu() {
+  func_echo-header
+  echo -e "You are currently running $eFaVERSION."
+  echo ""
+  echo -e "Please choose an option:"
+  echo -e " "
+  echo -e "0) Logout from ssh                    10) Apache Settings"
+  echo -e "1) Shell                              11) Virus Settings"
+  echo -e "2) Reboot system                      12) System Restore"
+  echo -e "3) Halt system                        13) Update Now"
+  echo -e "4) IP Settings                        14) Maintenance Mode"
+  echo -e "5) Tunables                           15) Let's Encrypt"
+  echo -e "6) MailWatch Settings                 16) DKIM and DMARC"
+  echo -e "7) Mail Settings                      17) Webmin"
+  echo -e "8) Spam Settings                      18) Fail2Ban"
+  echo -e "9) MariaDB Recovery                   19) Auto-Backup settings"
+  echo -e ""
+  echo -e "M) Switch to Modern Mode              T) Open TUI Dialog"
+  echo -e ""
+  echo -e -n "$green[eFa-NG]$clean : "
+  local choice
+  read choice || exit 0
+  func_dispatch_choice "$choice"
+}
+
+# TUI (Whiptail) Menu
+func_tui_menu() {
+  if ! command -v whiptail >/dev/null 2>&1; then
+    echo -e "$red[ERROR]$clean whiptail is not installed. Falling back to Modern CLI."
+    UI_MODE="modern"
+    sleep 1
+    return 0
+  fi
+
+  while true; do
+    CHOICE=$(whiptail --title "EFA-NG Configuration Console" \
+      --backtitle "EFA-NG Project (https://efa-ng.space.ua)" \
+      --menu "Select an option using arrow keys and press Enter:" 24 76 16 \
+      "1"  "Shell (Exit to Bash)" \
+      "2"  "Reboot System" \
+      "3"  "Halt System" \
+      "4"  "IP & DNS Settings" \
+      "5"  "System Tunables (Threads)" \
+      "6"  "MailWatch Settings" \
+      "7"  "Mail Settings (Relay/Domains)" \
+      "8"  "Spam Filter Settings" \
+      "9"  "MariaDB Database Recovery" \
+      "10" "Apache & HTTPS Settings" \
+      "11" "Virus & Clean Delivery Settings" \
+      "12" "System Backup & Restore" \
+      "13" "⚡ System & Package Update" \
+      "14" "Maintenance Mode Toggle" \
+      "15" "Let's Encrypt SSL Certificates" \
+      "16" "DKIM and DMARC Wizard" \
+      "17" "Webmin Control Panel" \
+      "18" "Fail2Ban Protection" \
+      "19" "Auto-Backup Settings" \
+      "M"  "Switch UI Mode (Classic / Modern / TUI)" \
+      "0"  "Logout from SSH" \
+      3>&1 1>&2 2>&3)
+    
+    local ret=$?
+    if [ $ret -ne 0 ]; then
+      # User pressed Cancel or Esc
+      clear
+      echo -e "$green[eFa-NG]$clean Exited TUI."
+      exit 0
     fi
-# +---------------------------------------------------+
+    
+    func_dispatch_choice "$CHOICE"
+    
+    # If mode was switched away from TUI, exit loop so main dispatcher takes over
+    if [ "$UI_MODE" != "tui" ]; then
+      break
+    fi
+  done
+}
+
+# Main entry point
+if [ `whoami` == root ]; then
+  while true; do
+    if [ "$UI_MODE" == "tui" ]; then
+      func_tui_menu
+      exit 0
+    elif [ "$UI_MODE" == "classic" ]; then
+      show_classic_menu
+    else
+      show_modern_menu
+    fi
+  done
+else
+  echo -e "$red [eFa-NG] ERROR: Please become root.$clean"
+  exit 0
+fi
