@@ -3,6 +3,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: CentOS Stream 10 / EL10](https://img.shields.io/badge/Platform-CentOS%20Stream%2010%20%7C%20EL10-red.svg)](https://centos.org)
 [![Repository](https://img.shields.io/badge/GitHub-kit400%2FEFA--NG-green.svg)](https://github.com/kit400/EFA-NG)
+[![Telegram Channel](https://img.shields.io/badge/Telegram-Official%20Channel-24A1DE.svg?logo=telegram&logoColor=white)](https://t.me/EFA_NG)
 
 **EFA-NG** (Email Filter Appliance - Next Generation) is a modern, high-performance, open-source email security gateway designed to protect mail infrastructures against spam, phishing, malware, and viruses.
 
@@ -110,6 +111,14 @@ cd rpmbuild/SPECS
 ```
 
 Built RPMs and repository metadata will be generated in `rpm/efa-ng/centos10/release/`.
+
+---
+
+## Community & Official Support
+
+* **Official Support Channel (Telegram)**: [https://t.me/EFA_NG](https://t.me/EFA_NG)
+* **Official Project Portal**: [https://efa-ng.space.ua](https://efa-ng.space.ua)
+* **GitHub Issues & Discussions**: [https://github.com/kit400/EFA-NG/issues](https://github.com/kit400/EFA-NG/issues)
 
 ---
 

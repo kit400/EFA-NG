@@ -41,6 +41,8 @@ AutoReqProv:   no
 MailWatch for MailScanner is a web-based front-end to MailScanner written in
 PHP and MySQL. This is the EFA-NG modernized fork maintained for CentOS Stream 10 / EL10
 with integrated eFa branding, relay services, and enhanced session handling.
+Official Project Portal: https://efa-ng.space.ua
+Official Telegram Support: https://t.me/EFA_NG
 
 %prep
 %setup -q -n %{name}-NG-%{version}

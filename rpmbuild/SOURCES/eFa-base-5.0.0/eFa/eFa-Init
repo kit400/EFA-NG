@@ -845,6 +845,7 @@ func_echo-header(){
     echo -e "--------------------------------------------------------------"
     echo -e "---      Welcome to the EFA-NG Initial Configuration       ---"
     echo -e "---                 https://efa-ng.space.ua                ---"
+    echo -e "---          Support Channel: https://t.me/EFA_NG          ---"
     echo -e "--------------------------------------------------------------"
     echo ""
 }

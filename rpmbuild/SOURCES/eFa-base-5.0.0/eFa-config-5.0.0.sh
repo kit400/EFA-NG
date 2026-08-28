@@ -52,7 +52,7 @@ mkdir -p /etc/sysconfig/network-scripts.bak
 # Write SSH banner
 sed -i "/^#Banner / c\Banner /etc/banner"  /etc/ssh/sshd_config
 cat > /etc/banner << 'EOF'
-   Welcome to EFA-NG (https://efa-ng.space.ua)
+   Welcome to EFA-NG (https://efa-ng.space.ua | Telegram: https://t.me/EFA_NG)
 
  Warning!
 

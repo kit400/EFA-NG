@@ -17,7 +17,7 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 8
+%define releasenum 9
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
@@ -409,6 +409,7 @@ We try to create a complete package using existing open-source anti-spam
 projects and combine them to a single easy to use (virtual) appliance.
 
 For more information go to https://efa-ng.space.ua
+Official Telegram Support: https://t.me/EFA_NG
 
 eFa v5 is a rebuild of the previous eFa v4; the same components are used whenever
 possible but are all updated to the latest version.

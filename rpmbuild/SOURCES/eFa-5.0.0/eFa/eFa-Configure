@@ -91,6 +91,7 @@ func_echo-header(){
   echo -e "--------------------------------------------------------------"
   echo -e "---       Welcome to the EFA-NG Configuration program      ---"
   echo -e "---                 https://efa-ng.space.ua                ---"
+  echo -e "---          Support Channel: https://t.me/EFA_NG          ---"
   echo -e "--------------------------------------------------------------"
   echo ""
 }
@@ -346,7 +347,7 @@ show_modern_menu() {
   clear
   echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
   echo -e " ${cyan}│${clean}                      ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                      ${cyan}│${clean}"
-  echo -e " ${cyan}│${clean}                        https://efa-ng.space.ua                         ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}              https://efa-ng.space.ua  |  https://t.me/EFA_NG            ${cyan}│${clean}"
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
   fmt_full_row  "Hostname" "$host"
   fmt_full_row  "IP Addr " "$ip"
@@ -419,7 +420,7 @@ func_tui_menu() {
 
   while true; do
     CHOICE=$(whiptail --title "EFA-NG Configuration Console" \
-      --backtitle "EFA-NG Project (https://efa-ng.space.ua)" \
+      --backtitle "EFA-NG Project (https://efa-ng.space.ua | Support: https://t.me/EFA_NG)" \
       --menu "Select an option using arrow keys and press Enter:" 24 76 16 \
       "1"  "Shell (Exit to Bash)" \
       "2"  "Reboot System" \
