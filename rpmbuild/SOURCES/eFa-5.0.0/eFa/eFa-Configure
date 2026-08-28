@@ -278,41 +278,31 @@ func_dispatch_choice() {
   esac
 }
 
-fmt_header_full() {
+fmt_full_row() {
   local label="$1"
   local val="$2"
   local content="${label} : ${val}"
-  local len=${#content}
-  local max=68
-  if [ $len -gt $max ]; then
-    content="${content:0:$((max-3))}..."
-    len=$max
+  if [ ${#content} -gt 68 ]; then
+    content="${content:0:65}..."
   fi
-  local pad=$(( max - len ))
-  local spaces=$(printf "%*s" "$pad" "")
-  echo -e " ${cyan}│${clean}  ${content}${spaces}  ${cyan}│${clean}"
+  printf " ${cyan}│${clean}  %-68.68s  ${cyan}│${clean}\n" "$content"
 }
 
-fmt_header_split() {
+fmt_split_row() {
   local l_label="$1"
   local l_val="$2"
   local r_label="$3"
   local r_val="$4"
   
   local left="${l_label} : ${l_val}"
-  local right="${r_label} : ${r_val}"
-  
-  local l_len=${#left}
-  local r_len=${#right}
-  local pad=$(( 68 - l_len - r_len ))
-  if [ $pad -lt 2 ]; then
-    local max_l=$(( 68 - ${#l_label} - 3 - r_len - 5 ))
-    left="${l_label} : ${l_val:0:$max_l}..."
-    l_len=${#left}
-    pad=$(( 68 - l_len - r_len ))
+  if [ ${#left} -gt 41 ]; then
+    left="${left:0:38}..."
   fi
-  local spaces=$(printf "%*s" "$pad" "")
-  echo -e " ${cyan}│${clean}  ${left}${spaces}${right}  ${cyan}│${clean}"
+  local right="${r_label} : ${r_val}"
+  if [ ${#right} -gt 26 ]; then
+    right="${right:0:23}..."
+  fi
+  printf " ${cyan}│${clean}  %-42.42s%-26.26s  ${cyan}│${clean}\n" "$left" "$right"
 }
 
 # Modern Dashboard Menu
@@ -358,10 +348,10 @@ show_modern_menu() {
   echo -e " ${cyan}│${clean}                      ${bold}EFA-NG CONFIGURATION CONSOLE${clean}                      ${cyan}│${clean}"
   echo -e " ${cyan}│${clean}                        https://efa-ng.space.ua                         ${cyan}│${clean}"
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-  fmt_header_full  "Hostname" "$host"
-  fmt_header_split "IP Addr " "$ip" "eFa     " "v$eFaVERSION"
-  fmt_header_split "Uptime  " "$uptime_str" "Load    " "$load"
-  fmt_header_split "Memory  " "$mem" "UI Mode " "Modern Dashboard"
+  fmt_full_row  "Hostname" "$host"
+  fmt_full_row  "IP Addr " "$ip"
+  fmt_split_row "Uptime  " "$uptime_str" "Load   " "$load"
+  fmt_split_row "Memory  " "$mem" "Version" "$eFaVERSION (eFa-NG)"
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
   echo -e " ${cyan}│${clean}   ${bold}SERVICES:${clean}                                                            ${cyan}│${clean}"
   echo -e " ${cyan}│${clean}   Postfix: [$b_postfix]       MailScanner: [$b_ms]       MariaDB: [$b_maria]   ${cyan}│${clean}"
