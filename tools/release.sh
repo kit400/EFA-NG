@@ -105,6 +105,14 @@ if [ "$DRY_RUN" -eq 0 ]; then
     if [ -f "${EFA_DIR}/rpmbuild/SPECS/eFa5.spec" ]; then
         sed -i -E "s/^Version:\s+[0-9.]+/Version: ${CLEAN_VERSION}/g" "${EFA_DIR}/rpmbuild/SPECS/eFa5.spec"
     fi
+
+    # Update version.json files
+    if [ -f "${EFA_DIR}/version.json" ]; then
+        sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"${CLEAN_VERSION}\"/g" "${EFA_DIR}/version.json"
+    fi
+    if [ -f "${MAILWATCH_DIR}/version.json" ]; then
+        sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"${CLEAN_VERSION}\"/g" "${MAILWATCH_DIR}/version.json"
+    fi
 fi
 success "Version strings set to ${CLEAN_VERSION}"
 
