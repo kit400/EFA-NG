@@ -76,7 +76,7 @@ dim='\E[2m'
 clean='\E[00m'
 
 # Get version
-eFaVERSION="$(head -n 1 /etc/eFa-Version 2>/dev/null || echo '6.0.4')"
+eFaVERSION="$(head -n 1 /etc/eFa-Version 2>/dev/null || echo '6.0.5')"
 
 # Trap signals
 trap '' SIGINT SIGQUIT SIGTSTP

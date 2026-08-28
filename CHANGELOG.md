@@ -5,6 +5,44 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.5] - 2026-08-28
+
+### Added
+- **Official Telegram Support Integration**:
+  - Integrated official support channel (`https://t.me/EFA_NG`) and project portal (`https://efa-ng.space.ua`) across all documentation, GitHub repositories, RPM specs, CLI console, and Web UI.
+  - Added dedicated support badges and community links in `README.md` for both EFA-NG and MailWatch-NG.
+  - Added direct Telegram Support link to login page, footer, and tools directory in MailWatch-NG.
+  - Integrated Telegram support URL in SSH banner and initial setup wizard (`eFa-Init`).
+- **Interactive Multi-Mode Console Architecture (`eFa-Configure`)**:
+  - **Modern Dashboard**: Live host metrics, colored service status badges (`● OK` / `○ OFF`), and 4 categorized ANSI box-drawing cards.
+  - **Classic Mode**: Original 2-column menu layout preserved.
+  - **TUI Dialog Mode**: Native Ncurses-style dialog using `whiptail`.
+  - **Dynamic Mode Switcher (`M`)**: Persistent mode configuration stored in `/etc/eFa/eFa-Configure.conf`.
+- **Modernized System Update Workflow (`13) Update System & Packages`)**:
+  - Integrated `dnf --refresh check-update` preview before prompting to apply updates.
+  - Automated safe reload of web and mail services (`php-fpm`, `httpd`, `postfix`) after transaction completion.
+
+### Changed
+- **Mathematical Border Alignment & Extended Hostname/IP Formatting**:
+  - Allocated dedicated full-width rows for `Hostname` and `IP Addr` supporting up to 58 printable characters.
+  - Fully compatible with long enterprise FQDNs and dual-stack IPv4/IPv6 without border overflow or awkward truncation.
+  - Strictly aligned right-hand columns (`Load` and `Version`) starting at column 48 with guaranteed 75-column terminal boundary.
+- **TUI Whiptail Compatibility**:
+  - Removed non-standard UTF-8 symbols from TUI menu entries to ensure clean ncurses/dialog rendering.
+
+### Fixed
+- **Terminal UI Border Shifts**:
+  - Fixed ANSI escape sequence byte calculations in bash `printf` by isolating color tokens inside fixed-width brackets.
+  - Eliminated variable-width string overflows caused by multi-word uptime outputs.
+- **Configuration Helper Scripts (`lib-eFa-Configure`)**:
+  - Fixed inverted CIDR netmask validation logic in `func_ipsettings`.
+  - Fixed unescaped comment breaking admin email configuration in `func_mailsettings`.
+  - Updated legacy branding in `func_apachesettings` to `[eFa-NG]`.
+- **Non-Interactive Execution Safety**:
+  - Added clean EOF exit handling to `pause()` and `read choice` in `eFa-Configure` to prevent infinite loops in piped scripts or background automation.
+
+---
+
 ## [6.0.4] - 2026-08-26
 
 ### Added
