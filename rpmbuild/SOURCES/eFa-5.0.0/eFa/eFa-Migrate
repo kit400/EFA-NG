@@ -186,14 +186,20 @@ setup_ssh_connection() {
         target_pubkey="$(cat "$pub_file" 2>/dev/null)"
 
         echo ""
-        echo -e " ${red}✖ SSH passwordless access is not authorized yet.${clean}"
+        if [[ "$test_out" =~ "Connection refused" || "$test_out" =~ "Connection timed out" || "$test_out" =~ "No route to host" ]]; then
+            echo -e " ${red}✖ Network connection failed: cannot reach $SRC_HOST on port $SRC_PORT.${clean}"
+            echo -e "   ${dim}(Error: ${test_out})${clean}"
+            echo -e "   Please verify that the host is online, SSH service is running, and firewall allows port $SRC_PORT."
+        else
+            echo -e " ${red}✖ SSH authentication failed: root access is not authorized or PermitRootLogin is disabled.${clean}"
+        fi
         echo ""
         echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
         echo -e " ${cyan}│${clean}                     ${bold}SSH AUTHORIZATION ONELINER${clean}                         ${cyan}│${clean}"
         echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-        echo -e " ${cyan}│${clean} Open a terminal on your ${bold}SOURCE${clean} server (${cyan}$SRC_HOST${clean}) and run this command: ${cyan}│${clean}"
+        echo -e " ${cyan}│${clean} Open a terminal on your ${bold}SOURCE${clean} server (${cyan}$SRC_HOST${clean}) as root and run:       ${cyan}│${clean}"
         echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
-        echo -e " ${yellow}mkdir -p ~/.ssh && echo '$target_pubkey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys${clean}"
+        echo -e " ${yellow}mkdir -p ~/.ssh && echo '$target_pubkey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && (grep -q 'PermitRootLogin' /etc/ssh/sshd_config && sed -i -E 's/^#?[[:space:]]*PermitRootLogin[[:space:]]+.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config || echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config) && (systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true)${clean}"
         echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
         echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
         echo ""
