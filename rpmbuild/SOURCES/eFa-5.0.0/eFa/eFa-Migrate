@@ -635,9 +635,24 @@ execute_migration() {
         echo -e "       ${yellow}●${clean} Syncing SSL/TLS certificates..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/letsencrypt/" /etc/letsencrypt/ 2>/dev/null || true
 
-        # Apply specific audited parameter merges (conf.php, MailScanner.conf, Postfix main.cf, local.cf)
+        # Apply specific audited parameter merges (conf.php, MailScanner.conf, Postfix main.cf, local.cf, rules)
         echo -e "       ${yellow}●${clean} Applying selected custom parameter merges..."
         php "$AUDIT_SCRIPT" apply "$SRC_CONFIGS_DIR" 2>/dev/null || true
+
+        # Ensure all Postfix maps and session caches use lmdb on EL10
+        sed -i -E 's/\bhash:/lmdb:/g; s/\btree:/lmdb:/g' /etc/postfix/main.cf 2>/dev/null || true
+        postconf -e 'default_database_type = lmdb' 2>/dev/null || true
+        postconf -e 'smtp_tls_session_cache_database = lmdb:/var/lib/postfix/smtp_tls_session_cache' 2>/dev/null || true
+        postconf -e 'smtpd_tls_session_cache_database = lmdb:/var/lib/postfix/smtpd_tls_session_cache' 2>/dev/null || true
+
+        # Rebuild all Postfix maps with lmdb
+        for map in /etc/postfix/{transport,virtual,canonical,sender_canonical,recipient_canonical,sender_access,recipient_access,helo_access,header_checks,sasl_passwd,access}; do
+            if [[ -f "$map" ]]; then
+                postmap lmdb:"$map" 2>/dev/null || postmap "$map" 2>/dev/null || true
+            fi
+        done
+        postalias lmdb:/etc/aliases 2>/dev/null || newaliases 2>/dev/null || true
+        systemctl reload postfix 2>/dev/null || postfix reload 2>/dev/null || true
 
         echo -e "       ${green}✔ Core configurations migrated and merged.${clean}"
     fi

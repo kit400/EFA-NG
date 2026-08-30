@@ -118,13 +118,15 @@ function audit_postfix($srcPostconfFile) {
     $diffs = [];
     foreach ($src as $k => $v) {
         if (in_array($k, $ignore, true)) continue;
+        $normV = preg_replace('/\bhash:/', 'lmdb:', $v);
+        $normV = preg_replace('/\btree:/', 'lmdb:', $normV);
         $curVal = trim(shell_exec(sprintf("postconf -h %s 2>/dev/null", escapeshellarg($k))) ?? '');
         $defVal = trim(shell_exec(sprintf("postconf -d -h %s 2>/dev/null", escapeshellarg($k))) ?? '');
 
-        if ($v !== $defVal && $v !== $curVal) {
+        if ($normV !== $defVal && $normV !== $curVal) {
             $diffs[] = [
                 'key' => $k,
-                'src' => $v,
+                'src' => $normV,
                 'def' => $defVal !== '' ? $defVal : $curVal
             ];
         }
@@ -542,6 +544,8 @@ switch ($action) {
                 foreach ($keys as $k) {
                     if (!array_key_exists($k, $srcParams)) continue;
                     $val = $srcParams[$k];
+                    $val = preg_replace('/\bhash:/', 'lmdb:', $val);
+                    $val = preg_replace('/\btree:/', 'lmdb:', $val);
                     system(sprintf("postconf -e %s", escapeshellarg("$k = $val")));
                 }
                 echo " - Postfix: applied " . count($keys) . " custom parameters.\n";
