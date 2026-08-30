@@ -261,12 +261,17 @@ inspect_source_system() {
     [[ -z "$SRC_BAYES_SIZE" ]] && SRC_BAYES_SIZE="0"
 
     # Download source configs for deep comparison
-    echo -e " ${yellow}●${clean} Downloading configuration files for parameter audit..."
-    mkdir -p "$SRC_CONFIGS_DIR"
-    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /var/www/html/mailscanner/conf.php 2>/dev/null" > "$SRC_CONFIGS_DIR/conf.php" || true
-    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/MailScanner/MailScanner.conf 2>/dev/null" > "$SRC_CONFIGS_DIR/MailScanner.conf" || true
-    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "postconf -n 2>/dev/null" > "$SRC_CONFIGS_DIR/postfix_postconf_n.txt" || true
-    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/mail/spamassassin/local.cf 2>/dev/null" > "$SRC_CONFIGS_DIR/local.cf" || true
+    echo -e " ${yellow}●${clean} Downloading configuration files and rule tables for parameter audit..."
+    mkdir -p "$SRC_CONFIGS_DIR/extracted"
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "tar -czf - --ignore-failed-read \
+        -C /var/www/html/mailscanner conf.php \
+        -C /etc/MailScanner MailScanner.conf filename.rules.conf filetype.rules.conf archives.filename.rules.conf archives.filetype.rules.conf \
+        -C /etc/MailScanner rules/ \
+        -C /etc/mail/spamassassin local.cf \
+        -C /etc/postfix transport recipient_access sender_access helo_access relay_domains sasl_passwd 2>/dev/null" \
+        | tar -xzf - -C "$SRC_CONFIGS_DIR/extracted" 2>/dev/null || true
+
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "postconf -n 2>/dev/null" > "$SRC_CONFIGS_DIR/extracted/postfix_postconf_n.txt" || true
 
 fmt_profile_row() {
     local label="$1"
@@ -310,6 +315,9 @@ audit_and_select_configurations() {
     local c_ms=0
     local c_pf=0
     local c_sa=0
+    local c_ar=0
+    local c_pr=0
+    local c_pt=0
     local c_tot=0
 
     if [[ -n "$audit_sum" ]]; then
@@ -317,6 +325,9 @@ audit_and_select_configurations() {
         c_ms=$(echo "$audit_sum" | grep -o '"mailscanner":[0-9]*' | cut -d: -f2)
         c_pf=$(echo "$audit_sum" | grep -o '"postfix":[0-9]*' | cut -d: -f2)
         c_sa=$(echo "$audit_sum" | grep -o '"spamassassin":[0-9]*' | cut -d: -f2)
+        c_ar=$(echo "$audit_sum" | grep -o '"attachment_rules":[0-9]*' | cut -d: -f2)
+        c_pr=$(echo "$audit_sum" | grep -o '"policy_rules":[0-9]*' | cut -d: -f2)
+        c_pt=$(echo "$audit_sum" | grep -o '"postfix_tables":[0-9]*' | cut -d: -f2)
         c_tot=$(echo "$audit_sum" | grep -o '"total":[0-9]*' | cut -d: -f2)
     fi
 
@@ -336,12 +347,15 @@ audit_and_select_configurations() {
         printf " ${cyan}│${clean}  2) %-35s : %-28s ${cyan}│${clean}\n" "MailScanner.conf (Filters)" "$c_ms customized directives"
         printf " ${cyan}│${clean}  3) %-35s : %-28s ${cyan}│${clean}\n" "main.cf (Postfix MTA)" "$c_pf non-default parameters"
         printf " ${cyan}│${clean}  4) %-35s : %-28s ${cyan}│${clean}\n" "local.cf (SpamAssassin)" "$c_sa custom rules / scores"
+        printf " ${cyan}│${clean}  5) %-35s : %-28s ${cyan}│${clean}\n" "Attachment Rules (filename/filetype)" "$c_ar custom rules found"
+        printf " ${cyan}│${clean}  6) %-35s : %-28s ${cyan}│${clean}\n" "Policy Rules (White/Blacklists)" "$c_pr custom entries found"
+        printf " ${cyan}│${clean}  7) %-35s : %-28s ${cyan}│${clean}\n" "Postfix Tables (transport/relays)" "$c_pt custom records found"
         echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-        printf " ${cyan}│${clean}  ${bold}%-38s : %-28s${clean} ${cyan}│${clean}\n" "Total Customizations Found" "$c_tot parameters"
+        printf " ${cyan}│${clean}  ${bold}%-38s : %-28s${clean} ${cyan}│${clean}\n" "Total Customizations Found" "$c_tot parameters / rules"
         echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
         echo ""
         echo -e "  1) ${bold}Review & Select Parameters Individually${clean} (Interactive Checklist)"
-        echo -e "  2) ${bold}Migrate All Detected Custom Parameters${clean} (Recommended)"
+        echo -e "  2) ${bold}Migrate All Detected Custom Parameters & Rules${clean} (Recommended)"
         echo -e "  3) ${bold}Skip Custom Parameters Merge${clean} (Keep Target Defaults)"
         echo ""
         echo -en " ${green}[eFa-NG]${clean} Choice [1, 2, 3]: "
@@ -350,12 +364,12 @@ audit_and_select_configurations() {
 
         case "$c_opt" in
             1)
-                interactive_config_review_menu "$c_conf" "$c_ms" "$c_pf" "$c_sa"
+                interactive_config_review_menu "$c_conf" "$c_ms" "$c_pf" "$c_sa" "$c_ar" "$c_pr" "$c_pt"
                 break
                 ;;
             2)
                 php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
-                echo -e " ${green}✔ All detected custom parameters marked for migration.${clean}"
+                echo -e " ${green}✔ All detected custom parameters and rules marked for migration.${clean}"
                 sleep 1
                 break
                 ;;
@@ -378,6 +392,9 @@ interactive_config_review_menu() {
     local c_ms="$2"
     local c_pf="$3"
     local c_sa="$4"
+    local c_ar="$5"
+    local c_pr="$6"
+    local c_pt="$7"
 
     while true; do
         echo_header
@@ -389,28 +406,26 @@ interactive_config_review_menu() {
         echo -e "  2) MailScanner.conf ($c_ms customized directives)"
         echo -e "  3) main.cf          ($c_pf non-default Postfix parameters)"
         echo -e "  4) local.cf         ($c_sa SpamAssassin custom rules)"
+        echo -e "  5) Attachment Rules ($c_ar filename.rules.conf & filetype)"
+        echo -e "  6) Policy Rules     ($c_pr spam.whitelist & policy rules)"
+        echo -e "  7) Postfix Tables   ($c_pt transport & access maps)"
         echo ""
         echo -e "  A) Select All Across All Files"
         echo -e "  N) Deselect All"
         echo -e "  C) ${bold}Continue to Migration Scope${clean}"
         echo ""
-        echo -en " ${green}[eFa-NG]${clean} Choice [1-4, A, N, C]: "
+        echo -en " ${green}[eFa-NG]${clean} Choice [1-7, A, N, C]: "
         local sub
         read -r sub
 
         case "$sub" in
-            1)
-                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" conf_php
-                ;;
-            2)
-                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" mailscanner
-                ;;
-            3)
-                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" postfix
-                ;;
-            4)
-                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" spamassassin
-                ;;
+            1) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" conf_php ;;
+            2) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" mailscanner ;;
+            3) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" postfix ;;
+            4) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" spamassassin ;;
+            5) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" attachment_rules ;;
+            6) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" policy_rules ;;
+            7) php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" postfix_tables ;;
             a|A)
                 php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
                 echo -e " ${green}✔ All items selected.${clean}"
@@ -593,23 +608,19 @@ execute_migration() {
         echo -e " ${cyan}[1/7] Migrating Core Configurations & Applying Parameter Merges...${clean}"
 
         # Postfix maps & tables
-        echo -e "       ${yellow}●${clean} Syncing Postfix configuration & lookup tables..."
+        echo -e "       ${yellow}●${clean} Syncing Postfix lookup tables..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/postfix/" /etc/postfix/ \
-            --exclude="*.pid" --exclude="prng_exch" 2>/dev/null || true
+            --exclude="*.pid" --exclude="prng_exch" --exclude="main.cf*" --exclude="master.cf*" \
+            --exclude="dynamicmaps*" --exclude="postfix-files*" 2>/dev/null || true
+
+        chown -R postfix:postfix /etc/postfix 2>/dev/null || true
+        chown -R root:root /etc/postfix/dynamicmaps* 2>/dev/null || true
 
         # Rebuild Postfix maps
         for map in /etc/postfix/{transport,virtual,canonical,sender_canonical,recipient_canonical,sender_access,recipient_access,helo_access,header_checks,sasl_passwd,access}; do
             if [[ -f "$map" ]]; then
-                postmap "$map" 2>/dev/null || true
+                postmap lmdb:"$map" 2>/dev/null || postmap "$map" 2>/dev/null || true
             fi
-        done
-        chown -R postfix:postfix /etc/postfix
-
-        # MailScanner rules & custom confs
-        echo -e "       ${yellow}●${clean} Syncing MailScanner rulesets..."
-        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/MailScanner/rules/" /etc/MailScanner/rules/ 2>/dev/null || true
-        for f in spam.lists.rules virus.lists.rules filename.rules filetype.rules phishing.safe.sites.conf archives.filename.rules archives.filetype.rules; do
-            rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/MailScanner/$f" /etc/MailScanner/$f 2>/dev/null || true
         done
 
         # OpenDKIM & OpenDMARC

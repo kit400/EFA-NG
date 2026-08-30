@@ -3,6 +3,8 @@
 /**
  * eFa-Migrate Configuration Audit & Merge Engine
  * Compares source configs with defaults and merges user-selected parameters.
+ * Covers: conf.php, MailScanner.conf, main.cf, local.cf,
+ *         filename/filetype rules, policy rules, and postfix lookup tables.
  * Copyright (C) 2026 EFA-NG Project (https://efa-ng.space.ua)
  */
 
@@ -34,6 +36,9 @@ function parse_key_value_file($file, $delimiter = '=') {
     return $res;
 }
 
+// -----------------------------------------------------------------------------
+// 1. conf.php
+// -----------------------------------------------------------------------------
 function audit_conf_php($srcFile) {
     $exampleFiles = [
         '/var/www/html/mailscanner/conf.php.example',
@@ -69,6 +74,9 @@ function audit_conf_php($srcFile) {
     return $diffs;
 }
 
+// -----------------------------------------------------------------------------
+// 2. MailScanner.conf
+// -----------------------------------------------------------------------------
 function audit_mailscanner($srcFile) {
     $targetFile = '/etc/MailScanner/MailScanner.conf';
     $src = parse_key_value_file($srcFile);
@@ -94,6 +102,9 @@ function audit_mailscanner($srcFile) {
     return $diffs;
 }
 
+// -----------------------------------------------------------------------------
+// 3. Postfix main.cf
+// -----------------------------------------------------------------------------
 function audit_postfix($srcPostconfFile) {
     $src = parse_key_value_file($srcPostconfFile);
     $ignore = [
@@ -121,6 +132,9 @@ function audit_postfix($srcPostconfFile) {
     return $diffs;
 }
 
+// -----------------------------------------------------------------------------
+// 4. SpamAssassin local.cf
+// -----------------------------------------------------------------------------
 function audit_spamassassin($srcFile) {
     $targetFile = '/etc/mail/spamassassin/local.cf';
     $srcLines = file_exists($srcFile) ? file($srcFile, FILE_IGNORE_NEW_LINES) : [];
@@ -144,12 +158,189 @@ function audit_spamassassin($srcFile) {
     return $diffs;
 }
 
-function get_all_diffs($srcDir) {
+// -----------------------------------------------------------------------------
+// 5. Attachment Rules (filename.rules.conf, filetype.rules.conf, archives.*)
+// -----------------------------------------------------------------------------
+function audit_attachment_rules($srcDir) {
+    $ruleFiles = [
+        'filename.rules.conf',
+        'filetype.rules.conf',
+        'archives.filename.rules.conf',
+        'archives.filetype.rules.conf'
+    ];
+    $diffs = [];
+    foreach ($ruleFiles as $rf) {
+        $srcPath = "$srcDir/$rf";
+        if (!file_exists($srcPath)) {
+            $srcPath = "$srcDir/attachment_rules/$rf";
+        }
+        $tgtPath = "/etc/MailScanner/$rf";
+        if (!file_exists($srcPath)) continue;
+
+        $srcLines = file($srcPath, FILE_IGNORE_NEW_LINES);
+        $tgtLines = file_exists($tgtPath) ? file($tgtPath, FILE_IGNORE_NEW_LINES) : [];
+
+        $tgtIndex = [];
+        foreach ($tgtLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            $norm = preg_replace('/\s+/', ' ', $t);
+            $tgtIndex[$norm] = true;
+            $parts = preg_split('/\s+/', $t, 3);
+            if (count($parts) >= 2) {
+                $tgtIndex[$parts[0] . ' ' . $parts[1]] = true;
+            }
+        }
+
+        foreach ($srcLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            $norm = preg_replace('/\s+/', ' ', $t);
+            $parts = preg_split('/\s+/', $t, 3);
+            $ruleKey = count($parts) >= 2 ? ($parts[0] . ' ' . $parts[1]) : $norm;
+
+            if (!isset($tgtIndex[$norm]) && !isset($tgtIndex[$ruleKey])) {
+                $diffs[] = [
+                    'key' => "$rf: $ruleKey",
+                    'src' => $t,
+                    'def' => '(not present in default)',
+                    'file' => $rf,
+                    'target_path' => $tgtPath
+                ];
+            }
+        }
+    }
+    return $diffs;
+}
+
+// -----------------------------------------------------------------------------
+// 6. Policy Rules (spam.whitelist.rules, spam.blacklist.rules, etc.)
+// -----------------------------------------------------------------------------
+function audit_policy_rules($srcDir) {
+    $policyFiles = [
+        'spam.whitelist.rules',
+        'spam.blacklist.rules',
+        'bounce.rules',
+        'max.message.size.rules',
+        'content.scanning.rules'
+    ];
+    $diffs = [];
+    foreach ($policyFiles as $pf) {
+        $srcPath = "$srcDir/rules/$pf";
+        if (!file_exists($srcPath)) {
+            $srcPath = "$srcDir/policy_rules/$pf";
+        }
+        if (!file_exists($srcPath)) {
+            $srcPath = "$srcDir/$pf";
+        }
+        $tgtPath = "/etc/MailScanner/rules/$pf";
+        if (!file_exists($srcPath)) continue;
+
+        $srcLines = file($srcPath, FILE_IGNORE_NEW_LINES);
+        $tgtLines = file_exists($tgtPath) ? file($tgtPath, FILE_IGNORE_NEW_LINES) : [];
+
+        $tgtIndex = [];
+        foreach ($tgtLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            $norm = preg_replace('/\s+/', ' ', $t);
+            $tgtIndex[$norm] = true;
+        }
+
+        foreach ($srcLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            if (preg_match('/^(FromOrTo:)?\s*default\s+no/i', $t) || preg_match('/^default\s+no/i', $t)) continue;
+
+            $norm = preg_replace('/\s+/', ' ', $t);
+            if (!isset($tgtIndex[$norm])) {
+                $diffs[] = [
+                    'key' => "$pf: $norm",
+                    'src' => $t,
+                    'def' => '(not present in default)',
+                    'file' => $pf,
+                    'target_path' => $tgtPath
+                ];
+            }
+        }
+    }
+    return $diffs;
+}
+
+// -----------------------------------------------------------------------------
+// 7. Postfix Tables (transport, recipient_access, sender_access, relay_domains, etc.)
+// -----------------------------------------------------------------------------
+function audit_postfix_tables($srcDir) {
+    $tableFiles = [
+        'transport',
+        'recipient_access',
+        'sender_access',
+        'helo_access',
+        'relay_domains',
+        'sasl_passwd'
+    ];
+    $diffs = [];
+    foreach ($tableFiles as $tf) {
+        $srcPath = "$srcDir/$tf";
+        if (!file_exists($srcPath)) {
+            $srcPath = "$srcDir/postfix_tables/$tf";
+        }
+        $tgtPath = "/etc/postfix/$tf";
+        if (!file_exists($srcPath)) continue;
+
+        $srcLines = file($srcPath, FILE_IGNORE_NEW_LINES);
+        $tgtLines = file_exists($tgtPath) ? file($tgtPath, FILE_IGNORE_NEW_LINES) : [];
+
+        $tgtIndex = [];
+        foreach ($tgtLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            $norm = preg_replace('/\s+/', ' ', $t);
+            $tgtIndex[$norm] = true;
+            $parts = preg_split('/\s+/', $t, 2);
+            if (!empty($parts[0])) {
+                $tgtIndex[$parts[0]] = true;
+            }
+        }
+
+        foreach ($srcLines as $line) {
+            $t = trim($line);
+            if ($t === '' || $t[0] === '#') continue;
+            $norm = preg_replace('/\s+/', ' ', $t);
+            $parts = preg_split('/\s+/', $t, 2);
+            $lhs = $parts[0] ?? $norm;
+
+            if (!isset($tgtIndex[$norm]) && !isset($tgtIndex[$lhs])) {
+                $diffs[] = [
+                    'key' => "$tf: $norm",
+                    'src' => $t,
+                    'def' => '(not present in default)',
+                    'file' => $tf,
+                    'target_path' => $tgtPath
+                ];
+            }
+        }
+    }
+    return $diffs;
+}
+
+function resolve_src_dir($srcDir) {
+    if (is_dir("$srcDir/extracted")) {
+        return "$srcDir/extracted";
+    }
+    return $srcDir;
+}
+
+function get_all_diffs($baseDir) {
+    $dir = resolve_src_dir($baseDir);
     return [
-        'conf_php' => audit_conf_php("$srcDir/conf.php"),
-        'mailscanner' => audit_mailscanner("$srcDir/MailScanner.conf"),
-        'postfix' => audit_postfix("$srcDir/postfix_postconf_n.txt"),
-        'spamassassin' => audit_spamassassin("$srcDir/local.cf")
+        'conf_php' => audit_conf_php("$dir/conf.php"),
+        'mailscanner' => audit_mailscanner("$dir/MailScanner.conf"),
+        'postfix' => audit_postfix("$dir/postfix_postconf_n.txt"),
+        'spamassassin' => audit_spamassassin("$dir/local.cf"),
+        'attachment_rules' => audit_attachment_rules($dir),
+        'policy_rules' => audit_policy_rules($dir),
+        'postfix_tables' => audit_postfix_tables($dir)
     ];
 }
 
@@ -171,7 +362,6 @@ function review_type_menu($type, $srcDir) {
     if (file_exists($selFile)) {
         $selectedKeys = json_decode(file_get_contents($selFile), true) ?: [];
     } else {
-        // Default: all selected
         foreach ($items as $it) {
             $selectedKeys[] = $it['key'];
         }
@@ -181,7 +371,10 @@ function review_type_menu($type, $srcDir) {
         'conf_php' => 'conf.php (MailWatch GUI Settings)',
         'mailscanner' => 'MailScanner.conf (Filter Engine Directives)',
         'postfix' => 'main.cf (Postfix Mail Transport Parameters)',
-        'spamassassin' => 'local.cf (SpamAssassin Custom Rules & Scores)'
+        'spamassassin' => 'local.cf (SpamAssassin Custom Rules & Scores)',
+        'attachment_rules' => 'filename.rules.conf & Attachment Rules',
+        'policy_rules' => 'spam.whitelist.rules & Policy Rules',
+        'postfix_tables' => 'Postfix Routing & Transport Tables'
     ];
     $title = $titles[$type] ?? $type;
 
@@ -198,8 +391,8 @@ function review_type_menu($type, $srcDir) {
             $isChecked = in_array($it['key'], $selectedKeys, true);
             $mark = $isChecked ? "\033[32m[✔]\033[0m" : "\033[31m[ ]\033[0m";
 
-            $srcVal = is_bool($it['src']) ? ($it['src'] ? 'true' : 'false') : json_encode($it['src'], JSON_UNESCAPED_SLASHES);
-            $defVal = is_bool($it['def']) ? ($it['def'] ? 'true' : 'false') : json_encode($it['def'], JSON_UNESCAPED_SLASHES);
+            $srcVal = is_bool($it['src']) ? ($it['src'] ? 'true' : 'false') : (is_string($it['src']) ? $it['src'] : json_encode($it['src'], JSON_UNESCAPED_SLASHES));
+            $defVal = is_bool($it['def']) ? ($it['def'] ? 'true' : 'false') : (is_string($it['def']) ? $it['def'] : json_encode($it['def'], JSON_UNESCAPED_SLASHES));
 
             if (strlen($srcVal) > 35) $srcVal = substr($srcVal, 0, 32) . '...';
             if (strlen($defVal) > 25) $defVal = substr($defVal, 0, 22) . '...';
@@ -214,7 +407,7 @@ function review_type_menu($type, $srcDir) {
         $line = trim(fgets(STDIN));
         if (strcasecmp($line, 'c') === 0) {
             file_put_contents($selFile, json_encode(array_values($selectedKeys)));
-            echo "\n \033[32m✔ Saved " . count($selectedKeys) . " selected parameters for $type.\033[0m\n";
+            echo "\n \033[32m✔ Saved " . count($selectedKeys) . " selected items for $type.\033[0m\n";
             sleep(1);
             break;
         } elseif (strcasecmp($line, 'a') === 0) {
@@ -243,6 +436,8 @@ function review_type_menu($type, $srcDir) {
 $action = $argv[1] ?? 'summary';
 $srcDir = $argv[2] ?? '';
 
+$allTypes = ['conf_php', 'mailscanner', 'postfix', 'spamassassin', 'attachment_rules', 'policy_rules', 'postfix_tables'];
+
 switch ($action) {
     case 'summary':
         $all = get_all_diffs($srcDir);
@@ -251,7 +446,10 @@ switch ($action) {
             'mailscanner' => count($all['mailscanner']),
             'postfix' => count($all['postfix']),
             'spamassassin' => count($all['spamassassin']),
-            'total' => count($all['conf_php']) + count($all['mailscanner']) + count($all['postfix']) + count($all['spamassassin'])
+            'attachment_rules' => count($all['attachment_rules']),
+            'policy_rules' => count($all['policy_rules']),
+            'postfix_tables' => count($all['postfix_tables']),
+            'total' => count($all['conf_php']) + count($all['mailscanner']) + count($all['postfix']) + count($all['spamassassin']) + count($all['attachment_rules']) + count($all['policy_rules']) + count($all['postfix_tables'])
         ];
         echo json_encode($summary);
         break;
@@ -266,7 +464,7 @@ switch ($action) {
         break;
 
     case 'select-none':
-        foreach (['conf_php', 'mailscanner', 'postfix', 'spamassassin'] as $t) {
+        foreach ($allTypes as $t) {
             file_put_contents("$srcDir/selected_{$t}.json", json_encode([]));
         }
         echo "OK\n";
@@ -279,13 +477,14 @@ switch ($action) {
 
     case 'apply':
         echo "Applying selected configurations...\n";
+        $resolvedDir = resolve_src_dir($srcDir);
 
         // 1. conf.php
         $selConfFile = "$srcDir/selected_conf_php.json";
-        if (file_exists($selConfFile) && file_exists("$srcDir/conf.php") && file_exists('/var/www/html/mailscanner/conf.php')) {
+        if (file_exists($selConfFile) && file_exists("$resolvedDir/conf.php") && file_exists('/var/www/html/mailscanner/conf.php')) {
             $keys = json_decode(file_get_contents($selConfFile), true) ?: [];
             if (!empty($keys)) {
-                $srcConsts = get_php_constants("$srcDir/conf.php");
+                $srcConsts = get_php_constants("$resolvedDir/conf.php");
                 $content = file_get_contents('/var/www/html/mailscanner/conf.php');
                 foreach ($keys as $k) {
                     if (!array_key_exists($k, $srcConsts)) continue;
@@ -306,10 +505,10 @@ switch ($action) {
 
         // 2. MailScanner.conf
         $selMsFile = "$srcDir/selected_mailscanner.json";
-        if (file_exists($selMsFile) && file_exists("$srcDir/MailScanner.conf") && file_exists('/etc/MailScanner/MailScanner.conf')) {
+        if (file_exists($selMsFile) && file_exists("$resolvedDir/MailScanner.conf") && file_exists('/etc/MailScanner/MailScanner.conf')) {
             $keys = json_decode(file_get_contents($selMsFile), true) ?: [];
             if (!empty($keys)) {
-                $srcDirectives = parse_key_value_file("$srcDir/MailScanner.conf");
+                $srcDirectives = parse_key_value_file("$resolvedDir/MailScanner.conf");
                 $lines = file('/etc/MailScanner/MailScanner.conf', FILE_IGNORE_NEW_LINES);
 
                 foreach ($keys as $k) {
@@ -336,10 +535,10 @@ switch ($action) {
 
         // 3. Postfix main.cf
         $selPfFile = "$srcDir/selected_postfix.json";
-        if (file_exists($selPfFile) && file_exists("$srcDir/postfix_postconf_n.txt")) {
+        if (file_exists($selPfFile) && file_exists("$resolvedDir/postfix_postconf_n.txt")) {
             $keys = json_decode(file_get_contents($selPfFile), true) ?: [];
             if (!empty($keys)) {
-                $srcParams = parse_key_value_file("$srcDir/postfix_postconf_n.txt");
+                $srcParams = parse_key_value_file("$resolvedDir/postfix_postconf_n.txt");
                 foreach ($keys as $k) {
                     if (!array_key_exists($k, $srcParams)) continue;
                     $val = $srcParams[$k];
@@ -351,10 +550,10 @@ switch ($action) {
 
         // 4. SpamAssassin local.cf
         $selSaFile = "$srcDir/selected_spamassassin.json";
-        if (file_exists($selSaFile) && file_exists("$srcDir/local.cf") && file_exists('/etc/mail/spamassassin/local.cf')) {
+        if (file_exists($selSaFile) && file_exists("$resolvedDir/local.cf") && file_exists('/etc/mail/spamassassin/local.cf')) {
             $keys = json_decode(file_get_contents($selSaFile), true) ?: [];
             if (!empty($keys)) {
-                $srcLines = file("$srcDir/local.cf", FILE_IGNORE_NEW_LINES);
+                $srcLines = file("$resolvedDir/local.cf", FILE_IGNORE_NEW_LINES);
                 $tgtContent = file_get_contents('/etc/mail/spamassassin/local.cf');
 
                 foreach ($keys as $k) {
@@ -368,6 +567,116 @@ switch ($action) {
                 }
                 file_put_contents('/etc/mail/spamassassin/local.cf', $tgtContent);
                 echo " - SpamAssassin: merged " . count($keys) . " custom rules.\n";
+            }
+        }
+
+        // 5. Attachment Rules (filename.rules.conf, filetype.rules.conf, archives.*)
+        $selAttFile = "$srcDir/selected_attachment_rules.json";
+        if (file_exists($selAttFile)) {
+            $keys = json_decode(file_get_contents($selAttFile), true) ?: [];
+            if (!empty($keys)) {
+                $allAtt = audit_attachment_rules($resolvedDir);
+                $byFile = [];
+                foreach ($allAtt as $item) {
+                    if (in_array($item['key'], $keys, true)) {
+                        $byFile[$item['file']][] = $item['src'];
+                    }
+                }
+                foreach ($byFile as $rf => $rulesToAdd) {
+                    $tgtPath = "/etc/MailScanner/$rf";
+                    if (!file_exists($tgtPath)) continue;
+                    $lines = file($tgtPath, FILE_IGNORE_NEW_LINES);
+                    $insertIdx = 0;
+                    foreach ($lines as $i => $l) {
+                        $tl = trim($l);
+                        if ($tl !== '' && $tl[0] !== '#') {
+                            $insertIdx = $i;
+                            break;
+                        }
+                    }
+                    $block = ["\n# --- Migrated Custom Rules from Source EFA ---"];
+                    foreach ($rulesToAdd as $r) {
+                        $block[] = $r;
+                    }
+                    $block[] = "# --- End Migrated Custom Rules ---\n";
+                    array_splice($lines, $insertIdx, 0, $block);
+                    file_put_contents($tgtPath, implode("\n", $lines) . "\n");
+                    echo " - $rf: inserted " . count($rulesToAdd) . " custom rules.\n";
+                }
+            }
+        }
+
+        // 6. Policy Rules (spam.whitelist.rules, spam.blacklist.rules, etc.)
+        $selPolFile = "$srcDir/selected_policy_rules.json";
+        if (file_exists($selPolFile)) {
+            $keys = json_decode(file_get_contents($selPolFile), true) ?: [];
+            if (!empty($keys)) {
+                $allPol = audit_policy_rules($resolvedDir);
+                $byFile = [];
+                foreach ($allPol as $item) {
+                    if (in_array($item['key'], $keys, true)) {
+                        $byFile[$item['file']][] = $item['src'];
+                    }
+                }
+                foreach ($byFile as $pf => $rulesToAdd) {
+                    $tgtPath = "/etc/MailScanner/rules/$pf";
+                    if (!file_exists($tgtPath)) continue;
+                    $lines = file($tgtPath, FILE_IGNORE_NEW_LINES);
+                    $defaultIdx = -1;
+                    foreach ($lines as $i => $l) {
+                        if (preg_match('/^(FromOrTo:)?\s*default\s+/i', trim($l))) {
+                            $defaultIdx = $i;
+                            break;
+                        }
+                    }
+                    $block = ["\n# --- Migrated Policy Rules from Source EFA ---"];
+                    foreach ($rulesToAdd as $r) {
+                        $block[] = $r;
+                    }
+                    $block[] = "# --- End Migrated Policy Rules ---\n";
+                    if ($defaultIdx >= 0) {
+                        array_splice($lines, $defaultIdx, 0, $block);
+                    } else {
+                        $lines = array_merge($lines, $block);
+                    }
+                    file_put_contents($tgtPath, implode("\n", $lines) . "\n");
+                    chmod($tgtPath, 0664);
+                    chown($tgtPath, 'root');
+                    chgrp($tgtPath, 'apache');
+                    echo " - $pf: merged " . count($rulesToAdd) . " custom rules.\n";
+                }
+            }
+        }
+
+        // 7. Postfix Tables (transport, relay_domains, access lists, etc.)
+        $selPostFile = "$srcDir/selected_postfix_tables.json";
+        if (file_exists($selPostFile)) {
+            $keys = json_decode(file_get_contents($selPostFile), true) ?: [];
+            if (!empty($keys)) {
+                $allTables = audit_postfix_tables($resolvedDir);
+                $byFile = [];
+                foreach ($allTables as $item) {
+                    if (in_array($item['key'], $keys, true)) {
+                        $byFile[$item['file']][] = $item['src'];
+                    }
+                }
+                shell_exec("chown -R root:root /etc/postfix/dynamicmaps* 2>/dev/null");
+
+                foreach ($byFile as $tf => $recordsToAdd) {
+                    $tgtPath = "/etc/postfix/$tf";
+                    $tgtContent = file_exists($tgtPath) ? file_get_contents($tgtPath) : '';
+                    $tgtContent = rtrim($tgtContent) . "\n\n# --- Migrated Records from Source EFA ---\n";
+                    foreach ($recordsToAdd as $rec) {
+                        $tgtContent .= $rec . "\n";
+                    }
+                    $tgtContent .= "# --- End Migrated Records ---\n";
+                    file_put_contents($tgtPath, $tgtContent);
+                    chown($tgtPath, 'postfix');
+                    chmod($tgtPath, 0644);
+
+                    shell_exec(sprintf("postmap lmdb:%s 2>/dev/null || postmap %s 2>/dev/null || true", escapeshellarg($tgtPath), escapeshellarg($tgtPath)));
+                    echo " - /etc/postfix/$tf: appended " . count($recordsToAdd) . " records & updated map.\n";
+                }
             }
         }
 
