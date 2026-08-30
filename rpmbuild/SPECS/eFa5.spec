@@ -17,11 +17,11 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 3
+%define releasenum 1
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
-Version: 6.0.5
+Version: 6.0.6
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
 URL:       https://efa-ng.space.ua

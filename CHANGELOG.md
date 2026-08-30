@@ -5,6 +5,29 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.6] - 2026-08-30
+
+### Added
+- **EFA-NG Server Migration & Backup Wizard (`eFa-Migrate`)**:
+  - Full automated or selective live server migration over SSH from source to target.
+  - Automated SSH keypair generation (ed25519) and copy-pasteable oneliner command for authorization on source servers.
+  - Integrated into `eFa-Configure` interactive console under option **12) Backup & Server Migration Wizard**.
+  - Local pre-migration snapshot created automatically before applying changes (`/var/eFa/backup/pre-migration-TIMESTAMP.tar.gz`).
+- **Configuration Audit & Parameter Diff Engine (`eFa-Migrate-Audit.php`)**:
+  - Deep inspection of non-default and custom parameters across `conf.php`, `MailScanner.conf`, Postfix `main.cf`, and SpamAssassin `local.cf`.
+  - Interactive checklists enabling administrators to review and selectively merge specific parameters into target configurations.
+  - Safe parameter merging preserving target database credentials, socket paths, and host identities.
+- **Ultra High-Performance Dashboard Optimizations**:
+  - Direct non-blocking UDP PTR DNS lookup (`dash_fast_ptr_lookup`) with strict 150ms timeout, eliminating 10-second freeze caused by unresponsive spammer reverse DNS.
+  - Persistent 24h reverse DNS cache (`temp/dash_dns_cache.json`).
+  - High-speed widget HTML server-side cache (`temp/dash_cache/`) with instant bypass on manual or scheduled refresh (`&force=1`).
+  - Warm dashboard render time reduced from 10.6 seconds to less than 1 millisecond (~11,600x speedup).
+  - Cold execution with live DB aggregation reduced from 10.6 seconds to 126 ms.
+  - Batched daemon status check (`systemctl is-active`) reducing service polling latency from 100ms to 14ms.
+- **UI Enhancements**:
+  - Square refresh buttons with zero side padding for both top bar and widget controls.
+  - Equalized 28px height across all top bar action controls.
+
 ## [6.0.5] - 2026-08-28
 
 ### Added
