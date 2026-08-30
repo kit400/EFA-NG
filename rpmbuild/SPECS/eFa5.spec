@@ -17,7 +17,7 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 1
+%define releasenum 2
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
