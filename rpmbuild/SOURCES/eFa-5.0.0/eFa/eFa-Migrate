@@ -24,6 +24,7 @@ clean="\e[0m"
 CONFIG_DIR="/etc/eFa"
 BACKUP_DIR="/var/eFa/backup"
 TMP_DIR="/var/eFa/backup/tmp/migrate_$$"
+SRC_CONFIGS_DIR="$TMP_DIR/src_configs"
 TARGET_HOSTNAME="$(hostname -f 2>/dev/null || hostname)"
 TARGET_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 
@@ -54,6 +55,11 @@ MIG_HISTORY_RANGE="all" # all, 30d, 7d
 MIG_GREY=1
 MIG_GEOIP=1
 
+# Helper script location
+AUDIT_SCRIPT="/usr/sbin/eFa-Migrate-Audit.php"
+[[ ! -f "$AUDIT_SCRIPT" ]] && AUDIT_SCRIPT="/var/eFa/lib/eFa-Migrate-Audit.php"
+[[ ! -f "$AUDIT_SCRIPT" ]] && AUDIT_SCRIPT="$(dirname "$0")/eFa-Migrate-Audit.php"
+
 cleanup() {
     rm -rf "$TMP_DIR"
 }
@@ -83,7 +89,7 @@ check_root() {
 
 check_prerequisites() {
     local missing=()
-    for tool in ssh rsync tar gzip mysql mysqldump; do
+    for tool in ssh rsync tar gzip mysql mysqldump php; do
         if ! command -v "$tool" >/dev/null 2>&1; then
             missing+=("$tool")
         fi
@@ -112,7 +118,7 @@ check_prerequisites() {
     fi
 
     mkdir -p "$BACKUP_DIR"
-    mkdir -p "$TMP_DIR"
+    mkdir -p "$SRC_CONFIGS_DIR"
 }
 
 # -----------------------------------------------------------------------------
@@ -248,6 +254,14 @@ inspect_source_system() {
     SRC_BAYES_SIZE=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "mysql -u root -p'$SRC_MYSQLPWD' -e 'SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) FROM information_schema.tables WHERE table_schema=\"sa_bayes\";' -s -N 2>/dev/null" 2>/dev/null)
     [[ -z "$SRC_BAYES_SIZE" ]] && SRC_BAYES_SIZE="0"
 
+    # Download source configs for deep comparison
+    echo -e " ${yellow}●${clean} Downloading configuration files for parameter audit..."
+    mkdir -p "$SRC_CONFIGS_DIR"
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /var/www/html/mailscanner/conf.php 2>/dev/null" > "$SRC_CONFIGS_DIR/conf.php" || true
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/MailScanner/MailScanner.conf 2>/dev/null" > "$SRC_CONFIGS_DIR/MailScanner.conf" || true
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "postconf -n 2>/dev/null" > "$SRC_CONFIGS_DIR/postfix_postconf_n.txt" || true
+    ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/mail/spamassassin/local.cf 2>/dev/null" > "$SRC_CONFIGS_DIR/local.cf" || true
+
     echo ""
     echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
     echo -e " ${cyan}│${clean}                      ${bold}SOURCE SERVER PROFILE${clean}                             ${cyan}│${clean}"
@@ -263,7 +277,136 @@ inspect_source_system() {
     printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Quarantine Spool Size" "$SRC_QUARANTINE_SIZE"
     echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
     echo ""
-    pause_prompt "Review profile and press [Enter] to proceed to migration options..."
+    pause_prompt "Review profile and press [Enter] to proceed to configuration audit..."
+}
+
+# -----------------------------------------------------------------------------
+# Configuration Audit & Custom Differences Review
+# -----------------------------------------------------------------------------
+audit_and_select_configurations() {
+    local audit_sum
+    audit_sum=$(php "$AUDIT_SCRIPT" summary "$SRC_CONFIGS_DIR" 2>/dev/null)
+
+    local c_conf=0
+    local c_ms=0
+    local c_pf=0
+    local c_sa=0
+    local c_tot=0
+
+    if [[ -n "$audit_sum" ]]; then
+        c_conf=$(echo "$audit_sum" | grep -o '"conf_php":[0-9]*' | cut -d: -f2)
+        c_ms=$(echo "$audit_sum" | grep -o '"mailscanner":[0-9]*' | cut -d: -f2)
+        c_pf=$(echo "$audit_sum" | grep -o '"postfix":[0-9]*' | cut -d: -f2)
+        c_sa=$(echo "$audit_sum" | grep -o '"spamassassin":[0-9]*' | cut -d: -f2)
+        c_tot=$(echo "$audit_sum" | grep -o '"total":[0-9]*' | cut -d: -f2)
+    fi
+
+    # By default, select all detected differences
+    php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+
+    while true; do
+        echo_header
+        echo -e " ${bold}Step 3: Configuration Audit & Non-Default Customizations${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -e " Comparing source server configurations with Target defaults..."
+        echo ""
+        echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+        echo -e " ${cyan}│${clean}             ${bold}CUSTOMIZED CONFIGURATION PARAMETERS DETECTED${clean}               ${cyan}│${clean}"
+        echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+        printf " ${cyan}│${clean}  1) %-35s : %-28s ${cyan}│${clean}\n" "conf.php (MailWatch GUI)" "$c_conf custom settings"
+        printf " ${cyan}│${clean}  2) %-35s : %-28s ${cyan}│${clean}\n" "MailScanner.conf (Filters)" "$c_ms customized directives"
+        printf " ${cyan}│${clean}  3) %-35s : %-28s ${cyan}│${clean}\n" "main.cf (Postfix MTA)" "$c_pf non-default parameters"
+        printf " ${cyan}│${clean}  4) %-35s : %-28s ${cyan}│${clean}\n" "local.cf (SpamAssassin)" "$c_sa custom rules / scores"
+        echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+        printf " ${cyan}│${clean}  ${bold}%-38s : %-28s${clean} ${cyan}│${clean}\n" "Total Customizations Found" "$c_tot parameters"
+        echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
+        echo ""
+        echo -e "  1) ${bold}Review & Select Parameters Individually${clean} (Interactive Checklist)"
+        echo -e "  2) ${bold}Migrate All Detected Custom Parameters${clean} (Recommended)"
+        echo -e "  3) ${bold}Skip Custom Parameters Merge${clean} (Keep Target Defaults)"
+        echo ""
+        echo -en " ${green}[eFa-NG]${clean} Choice [1, 2, 3]: "
+        local c_opt
+        read -r c_opt
+
+        case "$c_opt" in
+            1)
+                interactive_config_review_menu "$c_conf" "$c_ms" "$c_pf" "$c_sa"
+                break
+                ;;
+            2)
+                php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+                echo -e " ${green}✔ All detected custom parameters marked for migration.${clean}"
+                sleep 1
+                break
+                ;;
+            3)
+                php "$AUDIT_SCRIPT" select-none "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+                echo -e " ${yellow}● Custom parameters merge skipped. Keeping Target defaults.${clean}"
+                sleep 1
+                break
+                ;;
+            *)
+                echo -e "${red}Invalid option.${clean}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+interactive_config_review_menu() {
+    local c_conf="$1"
+    local c_ms="$2"
+    local c_pf="$3"
+    local c_sa="$4"
+
+    while true; do
+        echo_header
+        echo -e " ${bold}Review & Select Configuration Files${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -e " Select a file to inspect and toggle individual parameters:"
+        echo ""
+        echo -e "  1) conf.php         ($c_conf custom settings)"
+        echo -e "  2) MailScanner.conf ($c_ms customized directives)"
+        echo -e "  3) main.cf          ($c_pf non-default Postfix parameters)"
+        echo -e "  4) local.cf         ($c_sa SpamAssassin custom rules)"
+        echo ""
+        echo -e "  A) Select All Across All Files"
+        echo -e "  N) Deselect All"
+        echo -e "  C) ${bold}Continue to Migration Scope${clean}"
+        echo ""
+        echo -en " ${green}[eFa-NG]${clean} Choice [1-4, A, N, C]: "
+        local sub
+        read -r sub
+
+        case "$sub" in
+            1)
+                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" conf_php
+                ;;
+            2)
+                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" mailscanner
+                ;;
+            3)
+                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" postfix
+                ;;
+            4)
+                php "$AUDIT_SCRIPT" review "$SRC_CONFIGS_DIR" spamassassin
+                ;;
+            a|A)
+                php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+                echo -e " ${green}✔ All items selected.${clean}"
+                sleep 1
+                ;;
+            n|N)
+                php "$AUDIT_SCRIPT" select-none "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+                echo -e " ${yellow}● All items deselected.${clean}"
+                sleep 1
+                ;;
+            c|C)
+                break
+                ;;
+        esac
+    done
 }
 
 # -----------------------------------------------------------------------------
@@ -272,11 +415,11 @@ inspect_source_system() {
 choose_migration_mode() {
     while true; do
         echo_header
-        echo -e " ${bold}Step 3: Select Migration Scope${clean}"
+        echo -e " ${bold}Step 4: Select Migration Scope${clean}"
         echo -e " ──────────────────────────────────────────────────────────────────"
         echo ""
         echo -e " 1) ${bold}Full Automated Migration${clean} (Recommended)"
-        echo -e "    Complete transfer of all configuration, users, Bayes, quarantine,"
+        echo -e "    Complete transfer of configuration, users, Bayes, quarantine,"
         echo -e "    and message history."
         echo ""
         echo -e " 2) ${bold}Selective Component Migration${clean} (Custom)"
@@ -319,7 +462,7 @@ choose_migration_mode() {
 configure_selective_components() {
     while true; do
         echo_header
-        echo -e " ${bold}Step 3: Selective Component Configuration${clean}"
+        echo -e " ${bold}Step 4: Selective Component Configuration${clean}"
         echo -e " ──────────────────────────────────────────────────────────────────"
         echo -e " Toggle items on/off by typing their number, then press [C] to continue:"
         echo ""
@@ -383,7 +526,7 @@ configure_selective_components() {
 # -----------------------------------------------------------------------------
 create_target_snapshot() {
     echo_header
-    echo -e " ${bold}Step 4: Safety Pre-Migration Snapshot${clean}"
+    echo -e " ${bold}Step 5: Safety Pre-Migration Snapshot${clean}"
     echo -e " ──────────────────────────────────────────────────────────────────"
     echo -en " ${green}[eFa-NG]${clean} Create a local backup snapshot before applying changes? (Y/n): "
     local do_snap
@@ -422,15 +565,15 @@ create_target_snapshot() {
 # -----------------------------------------------------------------------------
 execute_migration() {
     echo_header
-    echo -e " ${bold}Step 5: Executing Migration from ${cyan}$SRC_HOST${clean} to ${green}$TARGET_HOSTNAME${clean}"
+    echo -e " ${bold}Step 6: Executing Migration from ${cyan}$SRC_HOST${clean} to ${green}$TARGET_HOSTNAME${clean}"
     echo -e " ──────────────────────────────────────────────────────────────────"
     echo ""
 
     # 1. Core Configuration
     if [[ $MIG_CONFIG -eq 1 ]]; then
-        echo -e " ${cyan}[1/7] Migrating Core Configurations (Postfix, MailScanner, DKIM)...${clean}"
+        echo -e " ${cyan}[1/7] Migrating Core Configurations & Applying Parameter Merges...${clean}"
 
-        # Postfix
+        # Postfix maps & tables
         echo -e "       ${yellow}●${clean} Syncing Postfix configuration & lookup tables..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/postfix/" /etc/postfix/ \
             --exclude="*.pid" --exclude="prng_exch" 2>/dev/null || true
@@ -462,7 +605,11 @@ execute_migration() {
         echo -e "       ${yellow}●${clean} Syncing SSL/TLS certificates..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/letsencrypt/" /etc/letsencrypt/ 2>/dev/null || true
 
-        echo -e "       ${green}✔ Core configurations migrated.${clean}"
+        # Apply specific audited parameter merges (conf.php, MailScanner.conf, Postfix main.cf, local.cf)
+        echo -e "       ${yellow}●${clean} Applying selected custom parameter merges..."
+        php "$AUDIT_SCRIPT" apply "$SRC_CONFIGS_DIR" 2>/dev/null || true
+
+        echo -e "       ${green}✔ Core configurations migrated and merged.${clean}"
     fi
 
     # 2. Users & Permissions
@@ -610,6 +757,7 @@ main() {
     done
 
     inspect_source_system
+    audit_and_select_configurations
     choose_migration_mode
     create_target_snapshot
     execute_migration
