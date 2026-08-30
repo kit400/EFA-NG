@@ -17,7 +17,7 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 1
+%define releasenum 2
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
@@ -444,6 +444,7 @@ mv eFa/eFa9.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 [ -f eFa/eFa10.te ] && mv eFa/eFa10.te $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
 mv eFa/eFa-Monitor-cron $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/eFa-Backup $RPM_BUILD_ROOT%{_sbindir}
+[ -f eFa/eFa-Migrate ] && mv eFa/eFa-Migrate $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/eFa-Weekly-DMARC $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/eFa-Daily-DMARC $RPM_BUILD_ROOT%{_sbindir}
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/cron.daily
@@ -537,6 +538,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0755, root, root) %{_sbindir}/eFa-Monitor-cron
 %config(noreplace) %{_sysconfdir}/sysconfig/eFa-Monitor
 %attr(0755, root, root) %{_sbindir}/eFa-Backup
+%attr(0755, root, root) %{_sbindir}/eFa-Migrate
 %attr(0755, root, root) %{_sbindir}/mysqltuner.pl
 %attr(0755, root, root) %{_sbindir}/eFa-Weekly-DMARC
 %attr(0755, root, root) %{_sbindir}/eFa-Daily-DMARC

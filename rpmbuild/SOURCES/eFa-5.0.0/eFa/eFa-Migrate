@@ -1,0 +1,618 @@
+#!/bin/bash
+# +--------------------------------------------------------------------+
+# eFa-Migrate - EFA-NG Live Migration & Backup Transfer Wizard
+# Version 6.0.5
+# +--------------------------------------------------------------------+
+# Copyright (C) 2012-2026 MailWatch Team / EFA-NG Project
+# https://efa-ng.space.ua | Support: https://t.me/EFA_NG
+# +--------------------------------------------------------------------+
+
+set -o pipefail
+
+# Colors and formatting
+bold="\e[1m"
+dim="\e[2m"
+green="\e[32m"
+red="\e[31m"
+yellow="\e[33m"
+blue="\e[34m"
+cyan="\e[36m"
+magenta="\e[35m"
+clean="\e[0m"
+
+# Global state
+CONFIG_DIR="/etc/eFa"
+BACKUP_DIR="/var/eFa/backup"
+TMP_DIR="/var/eFa/backup/tmp/migrate_$$"
+TARGET_HOSTNAME="$(hostname -f 2>/dev/null || hostname)"
+TARGET_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+
+SRC_HOST=""
+SRC_PORT="22"
+SRC_USER="root"
+SRC_HOSTNAME=""
+SRC_VERSION=""
+SRC_OS=""
+SRC_MYSQLPWD=""
+SRC_QUARANTINE_SIZE="0"
+SRC_MAILWATCH_SIZE="0"
+SRC_BAYES_SIZE="0"
+
+# Target DB Credentials
+TARGET_MYSQLPWD=""
+if [[ -f "$CONFIG_DIR/MySQL-Config" ]]; then
+    TARGET_MYSQLPWD="$(grep MYSQLROOTPWD "$CONFIG_DIR/MySQL-Config" | sed 's/.*://')"
+fi
+
+# Migration flags (defaults for full migration)
+MIG_CONFIG=1
+MIG_USERS=1
+MIG_BAYES=1
+MIG_QUARANTINE=1
+MIG_HISTORY=1
+MIG_HISTORY_RANGE="all" # all, 30d, 7d
+MIG_GREY=1
+MIG_GEOIP=1
+
+cleanup() {
+    rm -rf "$TMP_DIR"
+}
+trap cleanup EXIT INT TERM
+
+echo_header() {
+    clear
+    echo -e "${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+    echo -e "${cyan}│${clean}              ${bold}EFA-NG SERVER MIGRATION & BACKUP WIZARD${clean}                   ${cyan}│${clean}"
+    echo -e "${cyan}│${clean}              https://efa-ng.space.ua  |  https://t.me/EFA_NG            ${cyan}│${clean}"
+    echo -e "${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
+    echo ""
+}
+
+pause_prompt() {
+    local msg="${1:-Press [Enter] to continue...}"
+    echo -en "${dim}${msg}${clean} "
+    read -r _dummy
+}
+
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        echo -e "${red}[ERROR] eFa-Migrate must be run as root on the TARGET server.${clean}"
+        exit 1
+    fi
+}
+
+check_prerequisites() {
+    local missing=()
+    for tool in ssh rsync tar gzip mysql mysqldump; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo -e "${red}[ERROR] Missing required tools: ${missing[*]}${clean}"
+        echo -e "${yellow}[INFO] Installing missing dependencies...${clean}"
+        dnf -y install "${missing[@]}" || {
+            echo -e "${red}[ERROR] Failed to install dependencies. Please install: ${missing[*]}${clean}"
+            exit 1
+        }
+    fi
+
+    if [[ -z "$TARGET_MYSQLPWD" ]]; then
+        echo -e "${yellow}[WARN] Could not find MySQL root password in $CONFIG_DIR/MySQL-Config.${clean}"
+        echo -en "${green}[eFa-NG]${clean} Please enter Target MariaDB root password: "
+        read -s TARGET_MYSQLPWD
+        echo ""
+    fi
+
+    # Verify target local DB connection
+    if ! mysql -u root -p"$TARGET_MYSQLPWD" -e "STATUS;" >/dev/null 2>&1; then
+        echo -e "${red}[ERROR] Cannot connect to local Target MariaDB with root password.${clean}"
+        exit 1
+    fi
+
+    mkdir -p "$BACKUP_DIR"
+    mkdir -p "$TMP_DIR"
+}
+
+# -----------------------------------------------------------------------------
+# SSH Connection & Key Authorization
+# -----------------------------------------------------------------------------
+setup_ssh_connection() {
+    echo_header
+    echo -e " ${bold}Step 1: Connect to Source EFA Server${clean}"
+    echo -e " ──────────────────────────────────────────────────────────────────"
+    echo -e " Run this wizard on the ${green}TARGET (new)${clean} server to pull data from your ${cyan}SOURCE (old)${clean} server."
+    echo ""
+
+    while true; do
+        echo -en " ${green}[eFa-NG]${clean} Enter Source IP or FQDN: "
+        read -r SRC_HOST
+        SRC_HOST="$(echo "$SRC_HOST" | xargs)"
+        if [[ -n "$SRC_HOST" ]]; then
+            break
+        fi
+        echo -e " ${red}Source host cannot be empty.${clean}"
+    done
+
+    echo -en " ${green}[eFa-NG]${clean} Enter Source SSH Port [default: 22]: "
+    read -r input_port
+    input_port="$(echo "$input_port" | xargs)"
+    if [[ -n "$input_port" ]]; then
+        SRC_PORT="$input_port"
+    fi
+
+    echo -en " ${green}[eFa-NG]${clean} Enter Source SSH User [default: root]: "
+    read -r input_user
+    input_user="$(echo "$input_user" | xargs)"
+    if [[ -n "$input_user" ]]; then
+        SRC_USER="$input_user"
+    fi
+
+    echo ""
+    echo -e " ${yellow}●${clean} Testing SSH connection to ${cyan}$SRC_USER@$SRC_HOST:$SRC_PORT${clean}..."
+
+    while true; do
+        local test_out
+        test_out=$(ssh -p "$SRC_PORT" -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-new "$SRC_USER@$SRC_HOST" "echo EFA_AUTH_OK" 2>&1)
+        local test_ret=$?
+
+        if [[ $test_ret -eq 0 && "$test_out" == *"EFA_AUTH_OK"* ]]; then
+            echo -e " ${green}✔ SSH authentication successful!${clean}"
+            sleep 1
+            break
+        fi
+
+        # SSH failed - ensure target key exists
+        local key_file="/root/.ssh/id_ed25519"
+        local pub_file="/root/.ssh/id_ed25519.pub"
+        if [[ ! -f "$pub_file" ]]; then
+            if [[ -f "/root/.ssh/id_rsa.pub" ]]; then
+                pub_file="/root/.ssh/id_rsa.pub"
+            else
+                echo -e " ${yellow}● Generating new SSH keypair on Target (ed25519)...${clean}"
+                mkdir -p /root/.ssh && chmod 700 /root/.ssh
+                ssh-keygen -t ed25519 -N "" -f "$key_file" -C "eFa-Migrate-$(hostname)" >/dev/null 2>&1
+            fi
+        fi
+
+        local target_pubkey
+        target_pubkey="$(cat "$pub_file" 2>/dev/null)"
+
+        echo ""
+        echo -e " ${red}✖ SSH passwordless access is not authorized yet.${clean}"
+        echo ""
+        echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+        echo -e " ${cyan}│${clean}                     ${bold}SSH AUTHORIZATION ONELINER${clean}                         ${cyan}│${clean}"
+        echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+        echo -e " ${cyan}│${clean} Open a terminal on your ${bold}SOURCE${clean} server (${cyan}$SRC_HOST${clean}) and run this command: ${cyan}│${clean}"
+        echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
+        echo -e " ${yellow}mkdir -p ~/.ssh && echo '$target_pubkey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys${clean}"
+        echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
+        echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
+        echo ""
+        echo -e " ${bold}Options:${clean}"
+        echo -e "  [Enter] Re-test SSH connection"
+        echo -e "  [c]     Change host/port/user"
+        echo -e "  [q]     Quit migration"
+        echo ""
+        echo -en " ${green}[eFa-NG]${clean} Choice [Enter/c/q]: "
+        local auth_choice
+        read -r auth_choice
+
+        case "$auth_choice" in
+            q|Q)
+                echo -e "${yellow}Migration cancelled by user.${clean}"
+                exit 0
+                ;;
+            c|C)
+                return 1
+                ;;
+            *)
+                echo -e " ${yellow}● Re-testing connection...${clean}"
+                ;;
+        esac
+    done
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# Source Inspection & System Discovery
+# -----------------------------------------------------------------------------
+inspect_source_system() {
+    echo_header
+    echo -e " ${bold}Step 2: Inspecting Source Server Environment${clean}"
+    echo -e " ──────────────────────────────────────────────────────────────────"
+    echo -e " ${yellow}●${clean} Gathering configuration and database details from ${cyan}$SRC_HOST${clean}..."
+
+    # Remote info queries
+    SRC_HOSTNAME=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "hostname -f 2>/dev/null || hostname" 2>/dev/null)
+    SRC_VERSION=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/eFa-Version 2>/dev/null || echo 'Unknown'" 2>/dev/null)
+    SRC_OS=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '\"' || uname -sr" 2>/dev/null)
+    SRC_MYSQLPWD=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "grep MYSQLROOTPWD /etc/eFa/MySQL-Config 2>/dev/null | sed 's/.*://'" 2>/dev/null)
+
+    # Validate remote DB
+    local db_status="${green}Connected OK${clean}"
+    if ! ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "mysql -u root -p'$SRC_MYSQLPWD' -e 'STATUS;' >/dev/null 2>&1"; then
+        db_status="${red}Connection Failed (Check MySQL Password)${clean}"
+    fi
+
+    # Measure sizes
+    SRC_QUARANTINE_SIZE=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "du -sh /var/spool/MailScanner/quarantine 2>/dev/null | awk '{print \$1}'" 2>/dev/null)
+    [[ -z "$SRC_QUARANTINE_SIZE" ]] && SRC_QUARANTINE_SIZE="0B"
+
+    SRC_MAILWATCH_SIZE=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "mysql -u root -p'$SRC_MYSQLPWD' -e 'SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) FROM information_schema.tables WHERE table_schema=\"mailscanner\";' -s -N 2>/dev/null" 2>/dev/null)
+    [[ -z "$SRC_MAILWATCH_SIZE" ]] && SRC_MAILWATCH_SIZE="0"
+
+    SRC_BAYES_SIZE=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "mysql -u root -p'$SRC_MYSQLPWD' -e 'SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) FROM information_schema.tables WHERE table_schema=\"sa_bayes\";' -s -N 2>/dev/null" 2>/dev/null)
+    [[ -z "$SRC_BAYES_SIZE" ]] && SRC_BAYES_SIZE="0"
+
+    echo ""
+    echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+    echo -e " ${cyan}│${clean}                      ${bold}SOURCE SERVER PROFILE${clean}                             ${cyan}│${clean}"
+    echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Source FQDN" "$SRC_HOSTNAME"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Source IP & Port" "$SRC_HOST:$SRC_PORT"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Operating System" "$SRC_OS"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "eFa Version" "$SRC_VERSION"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "MariaDB Database" "$db_status"
+    echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "MailWatch DB Size" "${SRC_MAILWATCH_SIZE} MB"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "SpamAssassin Bayes DB" "${SRC_BAYES_SIZE} MB"
+    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Quarantine Spool Size" "$SRC_QUARANTINE_SIZE"
+    echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
+    echo ""
+    pause_prompt "Review profile and press [Enter] to proceed to migration options..."
+}
+
+# -----------------------------------------------------------------------------
+# Migration Mode Selection
+# -----------------------------------------------------------------------------
+choose_migration_mode() {
+    while true; do
+        echo_header
+        echo -e " ${bold}Step 3: Select Migration Scope${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo ""
+        echo -e " 1) ${bold}Full Automated Migration${clean} (Recommended)"
+        echo -e "    Complete transfer of all configuration, users, Bayes, quarantine,"
+        echo -e "    and message history."
+        echo ""
+        echo -e " 2) ${bold}Selective Component Migration${clean} (Custom)"
+        echo -e "    Interactively choose which specific components to transfer."
+        echo ""
+        echo -e " c) Cancel migration"
+        echo ""
+        echo -en " ${green}[eFa-NG]${clean} Choose mode [1, 2, c]: "
+        local mode
+        read -r mode
+
+        case "$mode" in
+            1)
+                MIG_CONFIG=1
+                MIG_USERS=1
+                MIG_BAYES=1
+                MIG_QUARANTINE=1
+                MIG_HISTORY=1
+                MIG_HISTORY_RANGE="all"
+                MIG_GREY=1
+                MIG_GEOIP=1
+                break
+                ;;
+            2)
+                configure_selective_components
+                break
+                ;;
+            c|C)
+                echo -e "${yellow}Migration cancelled.${clean}"
+                exit 0
+                ;;
+            *)
+                echo -e "${red}Invalid option.${clean}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+configure_selective_components() {
+    while true; do
+        echo_header
+        echo -e " ${bold}Step 3: Selective Component Configuration${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -e " Toggle items on/off by typing their number, then press [C] to continue:"
+        echo ""
+
+        local mark_cfg="${red}[ ]${clean}"; [[ $MIG_CONFIG -eq 1 ]] && mark_cfg="${green}[✔]${clean}"
+        local mark_usr="${red}[ ]${clean}"; [[ $MIG_USERS -eq 1 ]] && mark_usr="${green}[✔]${clean}"
+        local mark_sa="${red}[ ]${clean}"; [[ $MIG_BAYES -eq 1 ]] && mark_sa="${green}[✔]${clean}"
+        local mark_quar="${red}[ ]${clean}"; [[ $MIG_QUARANTINE -eq 1 ]] && mark_quar="${green}[✔]${clean}"
+        local mark_hist="${red}[ ]${clean}"; [[ $MIG_HISTORY -eq 1 ]] && mark_hist="${green}[✔]${clean}"
+        local mark_grey="${red}[ ]${clean}"; [[ $MIG_GREY -eq 1 ]] && mark_grey="${green}[✔]${clean}"
+        local mark_geo="${red}[ ]${clean}"; [[ $MIG_GEOIP -eq 1 ]] && mark_geo="${green}[✔]${clean}"
+
+        echo -e "  1) $mark_cfg Core Configs     (Postfix, MailScanner, DKIM/DMARC, TLS certs)"
+        echo -e "  2) $mark_usr Users & Rights   (MailWatch web accounts, domain admins, filters)"
+        echo -e "  3) $mark_sa SpamAssassin     (sa_bayes DB, tokens, local.cf, custom rules)"
+        echo -e "  4) $mark_quar Quarantine       (Quarantine spool files & database records)"
+        echo -e "  5) $mark_hist Message History  (maillog & mtalog - range: ${bold}$MIG_HISTORY_RANGE${clean})"
+        echo -e "  6) $mark_grey Greylisting      (sqlgrey database & whitelists)"
+        echo -e "  7) $mark_geo GeoIP & ASN      (MaxMind / strato-do GeoIP databases)"
+        echo ""
+        echo -e "  R) Toggle Message Range (all / 30d / 7d)"
+        echo -e "  A) Enable All                N) Disable All"
+        echo -e "  C) ${bold}Continue with Selected Components${clean}"
+        echo ""
+        echo -en " ${green}[eFa-NG]${clean} Toggle item or continue [1-7, R, A, N, C]: "
+        local sel
+        read -r sel
+
+        case "$sel" in
+            1) MIG_CONFIG=$((1 - MIG_CONFIG)) ;;
+            2) MIG_USERS=$((1 - MIG_USERS)) ;;
+            3) MIG_BAYES=$((1 - MIG_BAYES)) ;;
+            4) MIG_QUARANTINE=$((1 - MIG_QUARANTINE)) ;;
+            5) MIG_HISTORY=$((1 - MIG_HISTORY)) ;;
+            6) MIG_GREY=$((1 - MIG_GREY)) ;;
+            7) MIG_GEOIP=$((1 - MIG_GEOIP)) ;;
+            r|R)
+                if [[ "$MIG_HISTORY_RANGE" == "all" ]]; then
+                    MIG_HISTORY_RANGE="30d"
+                elif [[ "$MIG_HISTORY_RANGE" == "30d" ]]; then
+                    MIG_HISTORY_RANGE="7d"
+                else
+                    MIG_HISTORY_RANGE="all"
+                fi
+                ;;
+            a|A)
+                MIG_CONFIG=1; MIG_USERS=1; MIG_BAYES=1; MIG_QUARANTINE=1; MIG_HISTORY=1; MIG_GREY=1; MIG_GEOIP=1 ;;
+            n|N)
+                MIG_CONFIG=0; MIG_USERS=0; MIG_BAYES=0; MIG_QUARANTINE=0; MIG_HISTORY=0; MIG_GREY=0; MIG_GEOIP=0 ;;
+            c|C)
+                break
+                ;;
+            *)
+                ;;
+        esac
+    done
+}
+
+# -----------------------------------------------------------------------------
+# Local Snapshot / Rollback Safety
+# -----------------------------------------------------------------------------
+create_target_snapshot() {
+    echo_header
+    echo -e " ${bold}Step 4: Safety Pre-Migration Snapshot${clean}"
+    echo -e " ──────────────────────────────────────────────────────────────────"
+    echo -en " ${green}[eFa-NG]${clean} Create a local backup snapshot before applying changes? (Y/n): "
+    local do_snap
+    read -r do_snap
+
+    if [[ "$do_snap" =~ ^[nN]$ ]]; then
+        echo -e " ${yellow}Skipping local snapshot as requested.${clean}"
+        sleep 1
+        return 0
+    fi
+
+    local snap_name="pre-migration-$(date +%Y%m%d_%H%M%S)"
+    local snap_dir="$TMP_DIR/$snap_name"
+    mkdir -p "$snap_dir/sql" "$snap_dir/etc"
+
+    echo -e " ${yellow}●${clean} Creating local database dump..."
+    mysqldump -u root -p"$TARGET_MYSQLPWD" --all-databases --events > "$snap_dir/sql/databases.sql" 2>/dev/null || true
+
+    echo -e " ${yellow}●${clean} Backing up local configurations..."
+    mkdir -p "$snap_dir/etc/postfix" "$snap_dir/etc/MailScanner" "$snap_dir/etc/eFa" "$snap_dir/etc/mail"
+    [[ -d /etc/postfix ]] && cp -a /etc/postfix "$snap_dir/etc/" 2>/dev/null || true
+    [[ -d /etc/MailScanner ]] && cp -a /etc/MailScanner "$snap_dir/etc/" 2>/dev/null || true
+    [[ -d /etc/eFa ]] && cp -a /etc/eFa "$snap_dir/etc/" 2>/dev/null || true
+    [[ -d /etc/mail/spamassassin ]] && cp -a /etc/mail/spamassassin "$snap_dir/etc/mail/" 2>/dev/null || true
+
+    tar -czf "$BACKUP_DIR/$snap_name.tar.gz" -C "$TMP_DIR" "$snap_name" 2>/dev/null
+    rm -rf "$snap_dir"
+    chmod 0600 "$BACKUP_DIR/$snap_name.tar.gz"
+
+    echo -e " ${green}✔ Pre-migration snapshot created: $BACKUP_DIR/$snap_name.tar.gz${clean}"
+    sleep 1
+}
+
+# -----------------------------------------------------------------------------
+# Migration Execution
+# -----------------------------------------------------------------------------
+execute_migration() {
+    echo_header
+    echo -e " ${bold}Step 5: Executing Migration from ${cyan}$SRC_HOST${clean} to ${green}$TARGET_HOSTNAME${clean}"
+    echo -e " ──────────────────────────────────────────────────────────────────"
+    echo ""
+
+    # 1. Core Configuration
+    if [[ $MIG_CONFIG -eq 1 ]]; then
+        echo -e " ${cyan}[1/7] Migrating Core Configurations (Postfix, MailScanner, DKIM)...${clean}"
+
+        # Postfix
+        echo -e "       ${yellow}●${clean} Syncing Postfix configuration & lookup tables..."
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/postfix/" /etc/postfix/ \
+            --exclude="*.pid" --exclude="prng_exch" 2>/dev/null || true
+
+        # Rebuild Postfix maps
+        for map in /etc/postfix/{transport,virtual,canonical,sender_canonical,recipient_canonical,sender_access,recipient_access,helo_access,header_checks,sasl_passwd,access}; do
+            if [[ -f "$map" ]]; then
+                postmap "$map" 2>/dev/null || true
+            fi
+        done
+        chown -R postfix:postfix /etc/postfix
+
+        # MailScanner rules & custom confs
+        echo -e "       ${yellow}●${clean} Syncing MailScanner rulesets..."
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/MailScanner/rules/" /etc/MailScanner/rules/ 2>/dev/null || true
+        for f in spam.lists.rules virus.lists.rules filename.rules filetype.rules phishing.safe.sites.conf archives.filename.rules archives.filetype.rules; do
+            rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/MailScanner/$f" /etc/MailScanner/$f 2>/dev/null || true
+        done
+
+        # OpenDKIM & OpenDMARC
+        echo -e "       ${yellow}●${clean} Syncing OpenDKIM and OpenDMARC keys..."
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/opendkim/" /etc/opendkim/ 2>/dev/null || true
+        chown -R opendkim:opendkim /etc/opendkim 2>/dev/null || true
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/opendmarc/" /etc/opendmarc/ 2>/dev/null || true
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/opendmarc.conf" /etc/opendmarc.conf 2>/dev/null || true
+        chown -R opendmarc:opendmarc /etc/opendmarc 2>/dev/null || true
+
+        # SSL Certificates
+        echo -e "       ${yellow}●${clean} Syncing SSL/TLS certificates..."
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/letsencrypt/" /etc/letsencrypt/ 2>/dev/null || true
+
+        echo -e "       ${green}✔ Core configurations migrated.${clean}"
+    fi
+
+    # 2. Users & Permissions
+    if [[ $MIG_USERS -eq 1 ]]; then
+        echo -e " ${cyan}[2/7] Migrating MailWatch Users & Access Permissions...${clean}"
+        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysqldump -u root -p'$SRC_MYSQLPWD' mailscanner users user_filters user_dashboards saved_filters 2>/dev/null" \
+            | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || {
+                echo -e "       ${red}✖ Warning: Error importing users tables.${clean}"
+            }
+        echo -e "       ${green}✔ Users and permissions migrated.${clean}"
+    fi
+
+    # 3. SpamAssassin & Bayes
+    if [[ $MIG_BAYES -eq 1 ]]; then
+        echo -e " ${cyan}[3/7] Migrating SpamAssassin & Bayesian Database...${clean}"
+        echo -e "       ${yellow}●${clean} Transferring sa_bayes SQL database..."
+        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction sa_bayes 2>/dev/null" \
+            | mysql -u root -p"$TARGET_MYSQLPWD" sa_bayes 2>/dev/null || true
+
+        # Fix bayes user in DB
+        mysql -u root -p"$TARGET_MYSQLPWD" sa_bayes -e "UPDATE bayes_vars SET username = 'postfix' WHERE id = '1';" 2>/dev/null || true
+
+        # Transfer SpamAssassin custom configs
+        echo -e "       ${yellow}●${clean} Syncing /etc/mail/spamassassin rules and local.cf..."
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/mail/spamassassin/" /etc/mail/spamassassin/ \
+            --exclude="sa-update-keys" 2>/dev/null || true
+
+        echo -e "       ${green}✔ SpamAssassin database and rules migrated.${clean}"
+    fi
+
+    # 4. Quarantine
+    if [[ $MIG_QUARANTINE -eq 1 ]]; then
+        echo -e " ${cyan}[4/7] Migrating Quarantine Spool & Database Records...${clean}"
+        echo -e "       ${yellow}●${clean} Transferring quarantine database table..."
+        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction mailscanner quarantine 2>/dev/null" \
+            | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || true
+
+        echo -e "       ${yellow}●${clean} Syncing quarantine spool files (/var/spool/MailScanner/quarantine)..."
+        rsync -aHAX --info=progress2 -e "ssh -p $SRC_PORT" \
+            "$SRC_USER@$SRC_HOST:/var/spool/MailScanner/quarantine/" /var/spool/MailScanner/quarantine/ 2>/dev/null || true
+
+        chown -R postfix:apache /var/spool/MailScanner/quarantine 2>/dev/null || true
+        chmod -R 770 /var/spool/MailScanner/quarantine 2>/dev/null || true
+        echo -e "       ${green}✔ Quarantine migrated.${clean}"
+    fi
+
+    # 5. Message History & Logs
+    if [[ $MIG_HISTORY -eq 1 ]]; then
+        echo -e " ${cyan}[5/7] Migrating MailWatch Message History ($MIG_HISTORY_RANGE)...${clean}"
+        local where_clause=""
+        if [[ "$MIG_HISTORY_RANGE" == "30d" ]]; then
+            where_clause="--where=\"timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)\""
+        elif [[ "$MIG_HISTORY_RANGE" == "7d" ]]; then
+            where_clause="--where=\"timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)\""
+        fi
+
+        echo -e "       ${yellow}●${clean} Transferring maillog and mtalog tables..."
+        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction --quick $where_clause mailscanner maillog mtalog inq 2>/dev/null" \
+            | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || {
+                echo -e "       ${red}✖ Error importing maillog table.${clean}"
+            }
+
+        # Update hostnames if different
+        if [[ "$TARGET_HOSTNAME" != "$SRC_HOSTNAME" && -n "$SRC_HOSTNAME" ]]; then
+            echo -e "       ${yellow}●${clean} Adapting log records to new hostname: $TARGET_HOSTNAME..."
+            mysql -u root -p"$TARGET_MYSQLPWD" mailscanner -e "\
+                UPDATE maillog SET hostname='$TARGET_HOSTNAME' WHERE hostname='$SRC_HOSTNAME'; \
+                UPDATE mtalog SET host='$(hostname -s)' WHERE host='$(echo "$SRC_HOSTNAME" | cut -d. -f1)';" 2>/dev/null || true
+        fi
+        echo -e "       ${green}✔ Message logs migrated successfully.${clean}"
+    fi
+
+    # 6. Greylisting
+    if [[ $MIG_GREY -eq 1 ]]; then
+        echo -e " ${cyan}[6/7] Migrating SQLGrey Greylisting Database...${clean}"
+        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction sqlgrey 2>/dev/null" \
+            | mysql -u root -p"$TARGET_MYSQLPWD" sqlgrey 2>/dev/null || true
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/sqlgrey/" /etc/sqlgrey/ 2>/dev/null || true
+        echo -e "       ${green}✔ Greylisting database migrated.${clean}"
+    fi
+
+    # 7. GeoIP Databases
+    if [[ $MIG_GEOIP -eq 1 ]]; then
+        echo -e " ${cyan}[7/7] Syncing GeoIP & ASN Database files...${clean}"
+        mkdir -p /usr/share/GeoIP
+        rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/usr/share/GeoIP/" /usr/share/GeoIP/ 2>/dev/null || true
+        echo -e "       ${green}✔ GeoIP data synchronized.${clean}"
+    fi
+
+    # Finalization
+    echo ""
+    echo -e " ${bold}Finalizing & Optimizing Target System...${clean}"
+    echo -e " ──────────────────────────────────────────────────────────────────"
+
+    # Fix permissions
+    echo -e " ${yellow}●${clean} Fixing file permissions..."
+    chown -R apache:apache /var/www/html/mailscanner
+    chmod -R 775 /var/www/html/mailscanner/temp
+
+    # Re-run MailWatch DB upgrade script
+    echo -e " ${yellow}●${clean} Running MailWatch database schema upgrade..."
+    if [[ -f /usr/bin/mailwatch/tools/upgrade.php ]]; then
+        /usr/bin/mailwatch/tools/upgrade.php --skip-user-confirm /var/www/html/mailscanner/functions.php >/dev/null 2>&1 || true
+    fi
+
+    # Clear dashboard cache
+    rm -rf /var/www/html/mailscanner/temp/dash_cache/* 2>/dev/null || true
+
+    # Reload / Restart services
+    echo -e " ${yellow}●${clean} Restarting and reloading MailWatch services..."
+    systemctl restart mariadb postfix mailscanner php-fpm httpd unbound 2>/dev/null || true
+    systemctl restart opendkim opendmarc 2>/dev/null || true
+    systemctl restart sqlgrey 2>/dev/null || true
+
+    echo ""
+    echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
+    echo -e " ${cyan}│${clean}                   ${bold}MIGRATION COMPLETED SUCCESSFULLY!${clean}                    ${cyan}│${clean}"
+    echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
+    echo -e " ${cyan}│${clean}  All selected configurations, databases, and assets have been         ${cyan}│${clean}"
+    echo -e " ${cyan}│${clean}  transferred from ${cyan}$SRC_HOST${clean} to this server.                        ${cyan}│${clean}"
+    echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
+    echo -e " ${cyan}│${clean}  Web GUI URL : ${green}https://${TARGET_IP:-$TARGET_HOSTNAME}/mailscanner/${clean}               ${cyan}│${clean}"
+    echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
+    echo ""
+    pause_prompt "Press [Enter] to return..."
+}
+
+# -----------------------------------------------------------------------------
+# Main Entry Point
+# -----------------------------------------------------------------------------
+main() {
+    check_root
+    check_prerequisites
+
+    while true; do
+        if ! setup_ssh_connection; then
+            continue
+        fi
+        break
+    done
+
+    inspect_source_system
+    choose_migration_mode
+    create_target_snapshot
+    execute_migration
+}
+
+main "$@"
