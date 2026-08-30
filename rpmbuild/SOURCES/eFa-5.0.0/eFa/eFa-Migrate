@@ -510,7 +510,7 @@ configure_selective_components() {
         local mark_geo="${red}[ ]${clean}"; [[ $MIG_GEOIP -eq 1 ]] && mark_geo="${green}[✔]${clean}"
 
         echo -e "  1) $mark_cfg Core Configs     (Postfix, MailScanner, DKIM/DMARC, TLS certs)"
-        echo -e "  2) $mark_usr Users & Rights   (MailWatch web accounts, domain admins, filters)"
+        echo -e "  2) $mark_usr Users & Lists    (MailWatch web accounts, allowlists, blocklists)"
         echo -e "  3) $mark_sa SpamAssassin     (sa_bayes DB, tokens, local.cf, custom rules)"
         echo -e "  4) $mark_quar Quarantine       (Quarantine spool files & database records)"
         echo -e "  5) $mark_hist Message History  (maillog & mtalog - range: ${bold}$MIG_HISTORY_RANGE${clean})"
@@ -660,12 +660,12 @@ execute_migration() {
         echo -e "       ${green}✔ Core configurations migrated and merged.${clean}"
     fi
 
-    # 2. Users & Permissions
+    # 2. Users, Permissions & Lists
     if [[ $MIG_USERS -eq 1 ]]; then
-        echo -e " ${cyan}[2/7] Migrating MailWatch Users & Access Permissions...${clean}"
+        echo -e " ${cyan}[2/7] Migrating MailWatch Users, Permissions & Allow/Blocklists...${clean}"
         local existing_u_tables
         existing_u_tables=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
-            "mysql -u root -p'$SRC_MYSQLPWD' -s -N -e 'SELECT table_name FROM information_schema.tables WHERE table_schema=\"mailscanner\" AND table_name IN (\"users\", \"user_filters\", \"user_preferences\", \"saved_filters\", \"user_dashboards\");' 2>/dev/null" | xargs)
+            "mysql -u root -p'$SRC_MYSQLPWD' -s -N -e 'SELECT table_name FROM information_schema.tables WHERE table_schema=\"mailscanner\" AND table_name IN (\"users\", \"user_filters\", \"user_preferences\", \"saved_filters\", \"user_dashboards\", \"whitelist\", \"blacklist\", \"autorelease\");' 2>/dev/null" | xargs)
 
         if [[ -n "$existing_u_tables" ]]; then
             echo -e "       ${yellow}●${clean} Transferring tables: $existing_u_tables..."
@@ -673,12 +673,12 @@ execute_migration() {
                 "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction mailscanner $existing_u_tables 2>/dev/null" \
                 | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null
             if [[ ${PIPESTATUS[0]} -eq 0 && ${PIPESTATUS[1]} -eq 0 ]]; then
-                echo -e "       ${green}✔ Users and permissions migrated.${clean}"
+                echo -e "       ${green}✔ Users, permissions, allowlists and blocklists migrated.${clean}"
             else
-                echo -e "       ${red}✖ Warning: Error importing users tables.${clean}"
+                echo -e "       ${red}✖ Warning: Error importing users/lists tables.${clean}"
             fi
         else
-            echo -e "       ${yellow}● Warning: No user tables found on source.${clean}"
+            echo -e "       ${yellow}● Warning: No user or list tables found on source.${clean}"
         fi
     fi
 
