@@ -641,7 +641,10 @@ execute_migration() {
 
         # Ensure all Postfix maps and session caches use lmdb on EL10
         sed -i -E 's/\bhash:/lmdb:/g; s/\btree:/lmdb:/g' /etc/postfix/main.cf 2>/dev/null || true
+        sed -i -E 's/\bhash:/lmdb:/g; s/\btree:/lmdb:/g' /etc/postfix/master.cf 2>/dev/null || true
         postconf -e 'default_database_type = lmdb' 2>/dev/null || true
+        postconf -e 'address_verify_map = lmdb:$data_directory/verify_cache' 2>/dev/null || true
+        postconf -e 'postscreen_cache_map = lmdb:$data_directory/postscreen_cache' 2>/dev/null || true
         postconf -e 'smtp_tls_session_cache_database = lmdb:/var/lib/postfix/smtp_tls_session_cache' 2>/dev/null || true
         postconf -e 'smtpd_tls_session_cache_database = lmdb:/var/lib/postfix/smtpd_tls_session_cache' 2>/dev/null || true
 
