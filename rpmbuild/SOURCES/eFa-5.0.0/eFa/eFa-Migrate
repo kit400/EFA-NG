@@ -10,15 +10,15 @@
 set -o pipefail
 
 # Colors and formatting
-bold="\e[1m"
-dim="\e[2m"
-green="\e[32m"
-red="\e[31m"
-yellow="\e[33m"
-blue="\e[34m"
-cyan="\e[36m"
-magenta="\e[35m"
-clean="\e[0m"
+bold="$(printf '\033[1m')"
+dim="$(printf '\033[2m')"
+green="$(printf '\033[32m')"
+red="$(printf '\033[31m')"
+yellow="$(printf '\033[33m')"
+blue="$(printf '\033[34m')"
+cyan="$(printf '\033[36m')"
+magenta="$(printf '\033[35m')"
+clean="$(printf '\033[0m')"
 
 # Global state
 CONFIG_DIR="/etc/eFa"
@@ -268,19 +268,32 @@ inspect_source_system() {
     ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "postconf -n 2>/dev/null" > "$SRC_CONFIGS_DIR/postfix_postconf_n.txt" || true
     ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" "cat /etc/mail/spamassassin/local.cf 2>/dev/null" > "$SRC_CONFIGS_DIR/local.cf" || true
 
+fmt_profile_row() {
+    local label="$1"
+    local val_display="$2"
+    local clean_plain
+    clean_plain=$(echo "$val_display" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g")
+    local plain_len=${#clean_plain}
+    local pad_len=$(( 42 - plain_len ))
+    [[ $pad_len -lt 0 ]] && pad_len=0
+    local padding
+    printf -v padding '%*s' "$pad_len" ''
+    printf " ${cyan}│${clean}  %-24s : %s%s ${cyan}│${clean}\n" "$label" "$val_display" "$padding"
+}
+
     echo ""
     echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
     echo -e " ${cyan}│${clean}                      ${bold}SOURCE SERVER PROFILE${clean}                             ${cyan}│${clean}"
     echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Source FQDN" "$SRC_HOSTNAME"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Source IP & Port" "$SRC_HOST:$SRC_PORT"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Operating System" "$SRC_OS"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "eFa Version" "$SRC_VERSION"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "MariaDB Database" "$db_status"
+    fmt_profile_row "Source FQDN" "$SRC_HOSTNAME"
+    fmt_profile_row "Source IP & Port" "$SRC_HOST:$SRC_PORT"
+    fmt_profile_row "Operating System" "$SRC_OS"
+    fmt_profile_row "eFa Version" "$SRC_VERSION"
+    fmt_profile_row "MariaDB Database" "$db_status"
     echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "MailWatch DB Size" "${SRC_MAILWATCH_SIZE} MB"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "SpamAssassin Bayes DB" "${SRC_BAYES_SIZE} MB"
-    printf " ${cyan}│${clean}  %-24s : %-42s ${cyan}│${clean}\n" "Quarantine Spool Size" "$SRC_QUARANTINE_SIZE"
+    fmt_profile_row "MailWatch DB Size" "${SRC_MAILWATCH_SIZE} MB"
+    fmt_profile_row "SpamAssassin Bayes DB" "${SRC_BAYES_SIZE} MB"
+    fmt_profile_row "Quarantine Spool Size" "$SRC_QUARANTINE_SIZE"
     echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
     echo ""
     pause_prompt "Review profile and press [Enter] to proceed to configuration audit..."
@@ -621,12 +634,23 @@ execute_migration() {
     # 2. Users & Permissions
     if [[ $MIG_USERS -eq 1 ]]; then
         echo -e " ${cyan}[2/7] Migrating MailWatch Users & Access Permissions...${clean}"
-        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
-            "mysqldump -u root -p'$SRC_MYSQLPWD' mailscanner users user_filters user_dashboards saved_filters 2>/dev/null" \
-            | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || {
+        local existing_u_tables
+        existing_u_tables=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysql -u root -p'$SRC_MYSQLPWD' -s -N -e 'SELECT table_name FROM information_schema.tables WHERE table_schema=\"mailscanner\" AND table_name IN (\"users\", \"user_filters\", \"user_preferences\", \"saved_filters\", \"user_dashboards\");' 2>/dev/null" | xargs)
+
+        if [[ -n "$existing_u_tables" ]]; then
+            echo -e "       ${yellow}●${clean} Transferring tables: $existing_u_tables..."
+            ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+                "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction mailscanner $existing_u_tables 2>/dev/null" \
+                | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null
+            if [[ ${PIPESTATUS[0]} -eq 0 && ${PIPESTATUS[1]} -eq 0 ]]; then
+                echo -e "       ${green}✔ Users and permissions migrated.${clean}"
+            else
                 echo -e "       ${red}✖ Warning: Error importing users tables.${clean}"
-            }
-        echo -e "       ${green}✔ Users and permissions migrated.${clean}"
+            fi
+        else
+            echo -e "       ${yellow}● Warning: No user tables found on source.${clean}"
+        fi
     fi
 
     # 3. SpamAssassin & Bayes
@@ -675,21 +699,30 @@ execute_migration() {
             where_clause="--where=\"timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)\""
         fi
 
-        echo -e "       ${yellow}●${clean} Transferring maillog and mtalog tables..."
-        ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
-            "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction --quick $where_clause mailscanner maillog mtalog inq 2>/dev/null" \
-            | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || {
-                echo -e "       ${red}✖ Error importing maillog table.${clean}"
-            }
+        local existing_log_tables
+        existing_log_tables=$(ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+            "mysql -u root -p'$SRC_MYSQLPWD' -s -N -e 'SELECT table_name FROM information_schema.tables WHERE table_schema=\"mailscanner\" AND table_name IN (\"maillog\", \"mtalog\", \"inq\");' 2>/dev/null" | xargs)
+
+        if [[ -n "$existing_log_tables" ]]; then
+            echo -e "       ${yellow}●${clean} Transferring tables: $existing_log_tables..."
+            ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
+                "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction --quick $where_clause mailscanner $existing_log_tables 2>/dev/null" \
+                | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null
+            if [[ ${PIPESTATUS[0]} -eq 0 && ${PIPESTATUS[1]} -eq 0 ]]; then
+                echo -e "       ${green}✔ Message logs migrated successfully.${clean}"
+            else
+                echo -e "       ${red}✖ Error importing message logs table.${clean}"
+            fi
+        fi
 
         # Update hostnames if different
         if [[ "$TARGET_HOSTNAME" != "$SRC_HOSTNAME" && -n "$SRC_HOSTNAME" ]]; then
             echo -e "       ${yellow}●${clean} Adapting log records to new hostname: $TARGET_HOSTNAME..."
             mysql -u root -p"$TARGET_MYSQLPWD" mailscanner -e "\
-                UPDATE maillog SET hostname='$TARGET_HOSTNAME' WHERE hostname='$SRC_HOSTNAME'; \
+                UPDATE maillog SET hostname='$TARGET_HOSTNAME' WHERE hostname='$SRC_HOSTNAME';" 2>/dev/null || true
+            mysql -u root -p"$TARGET_MYSQLPWD" mailscanner -e "\
                 UPDATE mtalog SET host='$(hostname -s)' WHERE host='$(echo "$SRC_HOSTNAME" | cut -d. -f1)';" 2>/dev/null || true
         fi
-        echo -e "       ${green}✔ Message logs migrated successfully.${clean}"
     fi
 
     # 6. Greylisting
