@@ -54,11 +54,46 @@ MIG_HISTORY=1
 MIG_HISTORY_RANGE="all" # all, 30d, 7d
 MIG_GREY=1
 MIG_GEOIP=1
+MIG_CONFIG_MERGE=1
+NON_INTERACTIVE=0
+DO_SNAPSHOT=1
 
 # Helper script location
 AUDIT_SCRIPT="/usr/sbin/eFa-Migrate-Audit.php"
 [[ ! -f "$AUDIT_SCRIPT" ]] && AUDIT_SCRIPT="/var/eFa/lib/eFa-Migrate-Audit.php"
 [[ ! -f "$AUDIT_SCRIPT" ]] && AUDIT_SCRIPT="$(dirname "$0")/eFa-Migrate-Audit.php"
+
+# Box border helpers
+strip_ansi() {
+    echo "$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g"
+}
+
+fmt_box_line() {
+    local text="$1"
+    local clean_text
+    clean_text=$(strip_ansi "$text")
+    local plain_len=${#clean_text}
+    local pad_len=$(( 70 - plain_len ))
+    [[ $pad_len -lt 0 ]] && pad_len=0
+    local padding
+    printf -v padding "%*s" "$pad_len" ""
+    printf " ${cyan}│${clean}  %s%s${cyan}│${clean}\n" "$text" "$padding"
+}
+
+fmt_box_center() {
+    local text="$1"
+    local clean_text
+    clean_text=$(strip_ansi "$text")
+    local plain_len=${#clean_text}
+    local total_pad=$(( 72 - plain_len ))
+    [[ $total_pad -lt 0 ]] && total_pad=0
+    local pad_l=$(( total_pad / 2 ))
+    local pad_r=$(( total_pad - pad_l ))
+    local padding_l padding_r
+    printf -v padding_l "%*s" "$pad_l" ""
+    printf -v padding_r "%*s" "$pad_r" ""
+    printf " ${cyan}│${clean}%s%s%s${cyan}│${clean}\n" "$padding_l" "$text" "$padding_r"
+}
 
 cleanup() {
     rm -rf "$TMP_DIR"
@@ -66,7 +101,9 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo_header() {
-    clear
+    if [[ $NON_INTERACTIVE -eq 0 ]]; then
+        clear
+    fi
     echo -e "${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
     echo -e "${cyan}│${clean}              ${bold}EFA-NG SERVER MIGRATION & BACKUP WIZARD${clean}                   ${cyan}│${clean}"
     echo -e "${cyan}│${clean}              https://efa-ng.space.ua  |  https://t.me/EFA_NG            ${cyan}│${clean}"
@@ -75,6 +112,7 @@ echo_header() {
 }
 
 pause_prompt() {
+    [[ $NON_INTERACTIVE -eq 1 ]] && return 0
     local msg="${1:-Press [Enter] to continue...}"
     echo -en "${dim}${msg}${clean} "
     read -r _dummy
@@ -105,6 +143,11 @@ check_prerequisites() {
     fi
 
     if [[ -z "$TARGET_MYSQLPWD" ]]; then
+        if [[ $NON_INTERACTIVE -eq 1 ]]; then
+            echo -e "${red}[ERROR] MySQL root password not found in $CONFIG_DIR/MySQL-Config.${clean}"
+            echo -e "       Automated migration cannot prompt for password non-interactively."
+            exit 1
+        fi
         echo -e "${yellow}[WARN] Could not find MySQL root password in $CONFIG_DIR/MySQL-Config.${clean}"
         echo -en "${green}[eFa-NG]${clean} Please enter Target MariaDB root password: "
         read -s TARGET_MYSQLPWD
@@ -125,34 +168,41 @@ check_prerequisites() {
 # SSH Connection & Key Authorization
 # -----------------------------------------------------------------------------
 setup_ssh_connection() {
-    echo_header
-    echo -e " ${bold}Step 1: Connect to Source EFA Server${clean}"
-    echo -e " ──────────────────────────────────────────────────────────────────"
-    echo -e " Run this wizard on the ${green}TARGET (new)${clean} server to pull data from your ${cyan}SOURCE (old)${clean} server."
-    echo ""
+    if [[ $NON_INTERACTIVE -eq 0 ]]; then
+        echo_header
+        echo -e " ${bold}Step 1: Connect to Source EFA Server${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -e " Run this wizard on the ${green}TARGET (new)${clean} server to pull data from your ${cyan}SOURCE (old)${clean} server."
+        echo ""
 
-    while true; do
-        echo -en " ${green}[eFa-NG]${clean} Enter Source IP or FQDN: "
-        read -r SRC_HOST
-        SRC_HOST="$(echo "$SRC_HOST" | xargs)"
-        if [[ -n "$SRC_HOST" ]]; then
-            break
+        while true; do
+            echo -en " ${green}[eFa-NG]${clean} Enter Source IP or FQDN: "
+            read -r SRC_HOST
+            SRC_HOST="$(echo "$SRC_HOST" | xargs)"
+            if [[ -n "$SRC_HOST" ]]; then
+                break
+            fi
+            echo -e " ${red}Source host cannot be empty.${clean}"
+        done
+
+        echo -en " ${green}[eFa-NG]${clean} Enter Source SSH Port [default: 22]: "
+        read -r input_port
+        input_port="$(echo "$input_port" | xargs)"
+        if [[ -n "$input_port" ]]; then
+            SRC_PORT="$input_port"
         fi
-        echo -e " ${red}Source host cannot be empty.${clean}"
-    done
 
-    echo -en " ${green}[eFa-NG]${clean} Enter Source SSH Port [default: 22]: "
-    read -r input_port
-    input_port="$(echo "$input_port" | xargs)"
-    if [[ -n "$input_port" ]]; then
-        SRC_PORT="$input_port"
-    fi
-
-    echo -en " ${green}[eFa-NG]${clean} Enter Source SSH User [default: root]: "
-    read -r input_user
-    input_user="$(echo "$input_user" | xargs)"
-    if [[ -n "$input_user" ]]; then
-        SRC_USER="$input_user"
+        echo -en " ${green}[eFa-NG]${clean} Enter Source SSH User [default: root]: "
+        read -r input_user
+        input_user="$(echo "$input_user" | xargs)"
+        if [[ -n "$input_user" ]]; then
+            SRC_USER="$input_user"
+        fi
+    else
+        if [[ -z "$SRC_HOST" ]]; then
+            echo -e "${red}[ERROR] Source host is required in automated/cron mode (--source=<host>).${clean}"
+            exit 1
+        fi
     fi
 
     echo ""
@@ -165,7 +215,7 @@ setup_ssh_connection() {
 
         if [[ $test_ret -eq 0 && "$test_out" == *"EFA_AUTH_OK"* ]]; then
             echo -e " ${green}✔ SSH authentication successful!${clean}"
-            sleep 1
+            [[ $NON_INTERACTIVE -eq 0 ]] && sleep 1
             break
         fi
 
@@ -193,11 +243,19 @@ setup_ssh_connection() {
         else
             echo -e " ${red}✖ SSH authentication failed: root access is not authorized or PermitRootLogin is disabled.${clean}"
         fi
+
+        if [[ $NON_INTERACTIVE -eq 1 ]]; then
+            echo -e "   SSH key authorization is missing on source server ($SRC_HOST)."
+            echo -e "   Authorize target pubkey on $SRC_HOST with:"
+            echo -e "   mkdir -p ~/.ssh && echo '$target_pubkey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys"
+            exit 1
+        fi
+
         echo ""
         echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
-        echo -e " ${cyan}│${clean}                     ${bold}SSH AUTHORIZATION ONELINER${clean}                         ${cyan}│${clean}"
+        fmt_box_center "${bold}SSH AUTHORIZATION ONELINER${clean}"
         echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-        echo -e " ${cyan}│${clean} Open a terminal on your ${bold}SOURCE${clean} server (${cyan}$SRC_HOST${clean}) as root and run:       ${cyan}│${clean}"
+        fmt_box_line "Open a terminal on your ${bold}SOURCE${clean} server (${cyan}$SRC_HOST${clean}) as root and run:"
         echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
         echo -e " ${yellow}mkdir -p ~/.ssh && echo '$target_pubkey' >> ~/.ssh/authorized_keys && chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys && (grep -q 'PermitRootLogin' /etc/ssh/sshd_config && sed -i -E 's/^#?[[:space:]]*PermitRootLogin[[:space:]]+.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config || echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config) && (systemctl reload sshd 2>/dev/null || systemctl reload ssh 2>/dev/null || true)${clean}"
         echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
@@ -332,7 +390,20 @@ audit_and_select_configurations() {
     fi
 
     # By default, select all detected differences
-    php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+    if [[ $MIG_CONFIG_MERGE -eq 1 ]]; then
+        php "$AUDIT_SCRIPT" select-all "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+    else
+        php "$AUDIT_SCRIPT" select-none "$SRC_CONFIGS_DIR" >/dev/null 2>&1
+    fi
+
+    if [[ $NON_INTERACTIVE -eq 1 ]]; then
+        if [[ $MIG_CONFIG_MERGE -eq 1 ]]; then
+            echo -e " ${green}✔ Automated mode: $c_tot detected custom parameters and rules selected for migration.${clean}"
+        else
+            echo -e " ${yellow}● Automated mode: custom parameters merge skipped as requested (--no-config-merge).${clean}"
+        fi
+        return 0
+    fi
 
     while true; do
         echo_header
@@ -447,6 +518,14 @@ interactive_config_review_menu() {
 # Migration Mode Selection
 # -----------------------------------------------------------------------------
 choose_migration_mode() {
+    if [[ $NON_INTERACTIVE -eq 1 ]]; then
+        echo -e " ${bold}Step 4: Migration Scope${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -e " ${green}✔ Automated mode: Executing Full Automated Migration.${clean}"
+        echo -e "   Components: config=${MIG_CONFIG}, users=${MIG_USERS}, bayes=${MIG_BAYES}, quarantine=${MIG_QUARANTINE}, history=${MIG_HISTORY} (${MIG_HISTORY_RANGE}), grey=${MIG_GREY}, geoip=${MIG_GEOIP}"
+        return 0
+    fi
+
     while true; do
         echo_header
         echo -e " ${bold}Step 4: Select Migration Scope${clean}"
@@ -559,17 +638,26 @@ configure_selective_components() {
 # Local Snapshot / Rollback Safety
 # -----------------------------------------------------------------------------
 create_target_snapshot() {
-    echo_header
-    echo -e " ${bold}Step 5: Safety Pre-Migration Snapshot${clean}"
-    echo -e " ──────────────────────────────────────────────────────────────────"
-    echo -en " ${green}[eFa-NG]${clean} Create a local backup snapshot before applying changes? (Y/n): "
-    local do_snap
-    read -r do_snap
+    if [[ $NON_INTERACTIVE -eq 1 ]]; then
+        if [[ $DO_SNAPSHOT -eq 0 ]]; then
+            echo -e " ${yellow}Skipping local snapshot as requested (--no-snapshot).${clean}"
+            return 0
+        fi
+        echo -e " ${bold}Step 5: Safety Pre-Migration Snapshot${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+    else
+        echo_header
+        echo -e " ${bold}Step 5: Safety Pre-Migration Snapshot${clean}"
+        echo -e " ──────────────────────────────────────────────────────────────────"
+        echo -en " ${green}[eFa-NG]${clean} Create a local backup snapshot before applying changes? (Y/n): "
+        local do_snap
+        read -r do_snap
 
-    if [[ "$do_snap" =~ ^[nN]$ ]]; then
-        echo -e " ${yellow}Skipping local snapshot as requested.${clean}"
-        sleep 1
-        return 0
+        if [[ "$do_snap" =~ ^[nN]$ ]]; then
+            echo -e " ${yellow}Skipping local snapshot as requested.${clean}"
+            sleep 1
+            return 0
+        fi
     fi
 
     local snap_name="pre-migration-$(date +%Y%m%d_%H%M%S)"
@@ -799,21 +887,169 @@ execute_migration() {
 
     echo ""
     echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
-    echo -e " ${cyan}│${clean}                   ${bold}MIGRATION COMPLETED SUCCESSFULLY!${clean}                    ${cyan}│${clean}"
+    fmt_box_center "${bold}MIGRATION COMPLETED SUCCESSFULLY!${clean}"
     echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
-    echo -e " ${cyan}│${clean}  All selected configurations, databases, and assets have been         ${cyan}│${clean}"
-    echo -e " ${cyan}│${clean}  transferred from ${cyan}$SRC_HOST${clean} to this server.                        ${cyan}│${clean}"
-    echo -e " ${cyan}│${clean}                                                                        ${cyan}│${clean}"
-    echo -e " ${cyan}│${clean}  Web GUI URL : ${green}https://${TARGET_IP:-$TARGET_HOSTNAME}/mailscanner/${clean}               ${cyan}│${clean}"
+    fmt_box_line "All selected configurations, databases, and assets have been"
+    fmt_box_line "transferred from ${cyan}$SRC_HOST${clean} to this server."
+    fmt_box_line ""
+    fmt_box_line "Web GUI URL : ${green}https://${TARGET_IP:-$TARGET_HOSTNAME}/mailscanner/${clean}"
     echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
     echo ""
     pause_prompt "Press [Enter] to return..."
 }
 
 # -----------------------------------------------------------------------------
+# CLI Help & Usage
+# -----------------------------------------------------------------------------
+show_help() {
+    cat << 'EOF'
+eFa-Migrate - EFA-NG Live Migration & Backup Transfer Wizard
+
+Usage:
+  eFa-Migrate [options]
+  eFa-Migrate --cron --source=<host> [options]
+
+Modes:
+  Interactive (default) : Run without arguments to launch interactive TUI wizard.
+  Automated / Cron      : Run with --cron (or --auto / --batch) and --source=<host>
+                          for unattended full migration in a single line.
+
+Options:
+  -s, --source, --src=<host>     Source EFA server hostname or IP address (required in cron mode)
+  -p, --port=<port>              SSH port on source server (default: 22)
+  -u, --user=<user>              SSH user on source server (default: root)
+  --cron, --auto, --batch, -y    Run non-interactively without prompts (Full Automated Migration)
+  --full                         Execute full migration (all components, default)
+  --history-range=<range>        Message history range to migrate: all, 30d, 7d (default: all)
+  --no-snapshot, --skip-snapshot Do not create local safety backup snapshot before migration
+  --snapshot                     Force creating local safety backup snapshot before migration
+  --no-config-merge              Skip merging custom parameters from source configs (keep target defaults)
+  --no-config                    Skip Postfix, MailScanner, DKIM/DMARC and SSL certs
+  --no-users                     Skip MailWatch users, preferences, and allow/blocklists
+  --no-bayes                     Skip SpamAssassin Bayes database and custom rules
+  --no-quarantine                Skip quarantine spool files and database records
+  --no-history                   Skip message history (maillog, mtalog)
+  --no-grey                      Skip SQLGrey greylisting database
+  --no-geoip                     Skip GeoIP database synchronization
+  -h, --help                     Display this help message and exit
+  -v, --version                  Display version information
+
+Cron Examples:
+  # Daily full automated migration from source server at 03:00
+  0 3 * * * /usr/sbin/eFa-Migrate --cron --source=195.230.150.68 >> /var/log/eFa/eFa-Migrate.log 2>&1
+
+  # Full automated migration with 30-day message history on custom SSH port
+  eFa-Migrate --cron --source=old-efa.domain.com --port=2222 --history-range=30d
+
+  # Quick sync without message history and without snapshot
+  eFa-Migrate --cron --source=195.230.150.68 --no-history --no-snapshot
+
+EOF
+}
+
+# -----------------------------------------------------------------------------
 # Main Entry Point
 # -----------------------------------------------------------------------------
 main() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "eFa-Migrate version 6.0.6 (EFA-NG)"
+                exit 0
+                ;;
+            -s|--source|--src|--host)
+                SRC_HOST="$2"
+                shift 2
+                ;;
+            --source=*|--src=*|--host=*)
+                SRC_HOST="${1#*=}"
+                shift
+                ;;
+            -p|--port)
+                SRC_PORT="$2"
+                shift 2
+                ;;
+            --port=*)
+                SRC_PORT="${1#*=}"
+                shift
+                ;;
+            -u|--user)
+                SRC_USER="$2"
+                shift 2
+                ;;
+            --user=*)
+                SRC_USER="${1#*=}"
+                shift
+                ;;
+            --cron|--auto|--batch|-b|-y|--yes)
+                NON_INTERACTIVE=1
+                shift
+                ;;
+            --full)
+                MIG_CONFIG=1; MIG_USERS=1; MIG_BAYES=1; MIG_QUARANTINE=1
+                MIG_HISTORY=1; MIG_GREY=1; MIG_GEOIP=1
+                shift
+                ;;
+            --history-range|--history)
+                MIG_HISTORY_RANGE="$2"
+                shift 2
+                ;;
+            --history-range=*|--history=*)
+                MIG_HISTORY_RANGE="${1#*=}"
+                shift
+                ;;
+            --no-snapshot|--skip-snapshot)
+                DO_SNAPSHOT=0
+                shift
+                ;;
+            --snapshot)
+                DO_SNAPSHOT=1
+                shift
+                ;;
+            --no-config-merge)
+                MIG_CONFIG_MERGE=0
+                shift
+                ;;
+            --no-config)
+                MIG_CONFIG=0
+                shift
+                ;;
+            --no-users)
+                MIG_USERS=0
+                shift
+                ;;
+            --no-bayes)
+                MIG_BAYES=0
+                shift
+                ;;
+            --no-quarantine)
+                MIG_QUARANTINE=0
+                shift
+                ;;
+            --no-history)
+                MIG_HISTORY=0
+                shift
+                ;;
+            --no-grey)
+                MIG_GREY=0
+                shift
+                ;;
+            --no-geoip)
+                MIG_GEOIP=0
+                shift
+                ;;
+            *)
+                echo -e "${red}[ERROR] Unknown option: $1${clean}" >&2
+                echo "Use --help to view available options." >&2
+                exit 1
+                ;;
+        esac
+    done
+
     check_root
     check_prerequisites
 
