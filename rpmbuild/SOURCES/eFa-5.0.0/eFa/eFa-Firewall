@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # +--------------------------------------------------------------------+
-# EFA-NG Firewall & Access Control Manager (Rich TUI & GeoIP Edition)
+# EFA-NG Firewall & Access Control Manager (Native NFTables & GeoIP)
 # Version 20260901
+# Compatible with CentOS Stream 10 / RHEL / Debian / Ubuntu
 # +--------------------------------------------------------------------+
 # Copyright (C) 2026  https://efa-ng.space.ua
 #
@@ -19,6 +20,7 @@ import ipaddress
 import argparse
 import urllib.request
 import time
+import shutil
 
 # Try importing rich, provide clear fallback if missing
 try:
@@ -37,6 +39,7 @@ except ImportError:
 
 CONFIG_PATH = "/etc/eFa/firewall.conf"
 DEFAULT_CONFIG_PATH = "/etc/eFa/firewall.conf.default"
+NFT_EFA_FILE = "/etc/nftables/efa.nft"
 GEOIP_CACHE_DIR = "/var/eFa/geoip"
 
 console = Console() if RICH_AVAILABLE else None
@@ -244,13 +247,11 @@ def fetch_country_zone(country_code, force=False):
     f_v4 = os.path.join(GEOIP_CACHE_DIR, f"{cc}.zone")
     f_v6 = os.path.join(GEOIP_CACHE_DIR, f"{cc}6.zone")
 
-    # Check cache freshness (refresh if older than 14 days or force)
     need_v4 = force or not os.path.exists(f_v4) or (time.time() - os.path.getmtime(f_v4) > 14 * 86400)
     need_v6 = force or not os.path.exists(f_v6) or (time.time() - os.path.getmtime(f_v6) > 14 * 86400)
 
     if need_v4:
         v4_lines = []
-        # Try ipdeny.com
         try:
             url = f"http://www.ipdeny.com/ipblocks/data/countries/{cc}.zone"
             req = urllib.request.Request(url, headers={"User-Agent": "eFa-Firewall/6.0"})
@@ -262,7 +263,6 @@ def fetch_country_zone(country_code, force=False):
         except Exception:
             pass
 
-        # Fallback to ipverse
         if not v4_lines:
             try:
                 url = f"https://raw.githubusercontent.com/ipverse/rir-ip/master/country/{cc}/ipv4-aggregated.txt"
@@ -364,389 +364,393 @@ def update_all_geoip_caches(cfg, silent=False):
         else:
             print("[eFa-Firewall] GeoIP zone cache update complete.")
 
-# ----------------- Firewalld XML Generator -----------------
-def write_firewalld_ipset_xml(name, description, entries, family="inet"):
-    os.makedirs("/etc/firewalld/ipsets", exist_ok=True)
-    xml_file = f"/etc/firewalld/ipsets/{name}.xml"
+# ----------------- Native NFTables Generator & Manager -----------------
+def format_nft_set(name, type_str, elements):
+    lines = []
+    lines.append(f"    set {name} {{")
+    lines.append(f"        type {type_str}")
+    lines.append("        flags interval")
+    if elements:
+        sorted_elems = sorted(list(elements))
+        # Format elements cleanly
+        elem_str = ", ".join(sorted_elems)
+        lines.append(f"        elements = {{ {elem_str} }}")
+    lines.append("    }")
+    return lines
+
+def setup_nftables_persistence():
+    os.makedirs("/etc/nftables", exist_ok=True)
+    inc_line = f'include "{NFT_EFA_FILE}"'
     
-    lines = ['<?xml version="1.0" encoding="utf-8"?>']
-    lines.append('<ipset type="hash:net">')
-    lines.append(f'  <short>{name}</short>')
-    lines.append(f'  <description>{description}</description>')
-    lines.append('  <option name="maxelem" value="1000000"/>')
-    if family == "inet6":
-        lines.append('  <option name="family" value="inet6"/>')
-    for e in sorted(entries):
-        lines.append(f'  <entry>{e}</entry>')
-    lines.append('</ipset>\n')
-    
-    with open(xml_file, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    os.chmod(xml_file, 0o644)
+    # 1. Check RHEL / CentOS sysconfig
+    rhel_conf = "/etc/sysconfig/nftables.conf"
+    if os.path.exists(os.path.dirname(rhel_conf)):
+        has_inc = False
+        if os.path.exists(rhel_conf):
+            with open(rhel_conf, "r", encoding="utf-8", errors="ignore") as f:
+                content = f.read()
+                if inc_line in content or NFT_EFA_FILE in content:
+                    has_inc = True
+        if not has_inc:
+            with open(rhel_conf, "a", encoding="utf-8") as f:
+                f.write(f"\n# Include EFA-NG Firewall Rules\n{inc_line}\n")
+
+    # 2. Check Debian / Ubuntu /etc/nftables.conf
+    deb_conf = "/etc/nftables.conf"
+    if os.path.exists(deb_conf):
+        has_inc = False
+        with open(deb_conf, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+            if inc_line in content or NFT_EFA_FILE in content:
+                has_inc = True
+        if not has_inc:
+            with open(deb_conf, "a", encoding="utf-8") as f:
+                f.write(f"\n# Include EFA-NG Firewall Rules\n{inc_line}\n")
+
+    # 3. Disable conflicting firewalld if present
+    try:
+        subprocess.run(["systemctl", "disable", "--now", "firewalld"], capture_output=True, text=True)
+    except Exception:
+        pass
+
+    # 4. Enable and start nftables.service
+    try:
+        subprocess.run(["systemctl", "enable", "--now", "nftables"], capture_output=True, text=True)
+    except Exception:
+        pass
 
 def apply_firewall(cfg, silent=False):
     if not silent:
         if RICH_AVAILABLE:
-            console.print("[bold cyan]● Generating and applying firewall configuration...[/]")
+            console.print("[bold cyan]● Generating and applying native NFTables configuration...[/]")
         else:
-            print("[eFa-Firewall] Generating and applying firewall configuration...")
-    
+            print("[eFa-Firewall] Generating and applying native NFTables configuration...")
+
     enabled = cfg.get("enabled", True)
-    
+    allow_ping = cfg.get("allow_ping", True)
+
+    nft_lines = [
+        "#!/usr/sbin/nft -f",
+        "# +--------------------------------------------------------------------+",
+        "# EFA-NG Native NFTables Configuration (Auto-Generated)",
+        f"# Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        "# +--------------------------------------------------------------------+",
+        "",
+        "table inet efa",
+        "delete table inet efa",
+        "",
+        "table inet efa {"
+    ]
+
     if not enabled:
-        if not silent:
-            if RICH_AVAILABLE:
-                console.print("[bold yellow]● Firewall protection is DISABLED in configuration. Restoring open mode...[/]")
-            else:
-                print("[eFa-Firewall] Firewall protection is DISABLED. Restoring open mode...")
-        os.makedirs("/etc/firewalld/zones", exist_ok=True)
-        public_xml = """<?xml version="1.0" encoding="utf-8"?>
-<zone>
-  <short>Public</short>
-  <description>EFA-NG Unrestricted Mode</description>
-  <service name="ssh"/>
-  <service name="smtp"/>
-  <service name="dhcpv6-client"/>
-  <service name="http"/>
-  <service name="https"/>
-  <port port="80" protocol="tcp"/>
-  <port port="443" protocol="tcp"/>
-  <port port="110" protocol="tcp"/>
-  <port port="143" protocol="tcp"/>
-  <port port="587" protocol="tcp"/>
-  <port port="993" protocol="tcp"/>
-  <port port="995" protocol="tcp"/>
-  <port port="3306" protocol="tcp"/>
-  <port port="10050" protocol="tcp"/>
-  <forward/>
-</zone>
-"""
-        with open("/etc/firewalld/zones/public.xml", "w", encoding="utf-8") as f:
-            f.write(public_xml)
-        
-        if os.path.exists("/etc/firewalld/zones/trusted.xml"):
-            try:
-                os.remove("/etc/firewalld/zones/trusted.xml")
-            except Exception:
-                pass
-
-        res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
-        if res.returncode == 0:
-            if not silent:
-                if RICH_AVAILABLE:
-                    console.print("[bold green]● Firewall successfully set to open mode.[/]")
-                else:
-                    print("[eFa-Firewall] Firewall successfully set to open mode.")
-            return True
-        else:
-            if RICH_AVAILABLE:
-                console.print(f"[bold red]ERROR:[/] Failed to reload firewalld: {res.stderr}")
-            else:
-                print(f"[ERROR] Failed to reload firewalld: {res.stderr}")
-            return False
-
-    # 1. Static IPs
-    admin_v4 = set()
-    admin_v6 = set()
-    for item in cfg.get("admins", []):
-        ip = item.get("ip", "")
-        norm, ver = normalize_ip(ip)
-        if ver == 4:
-            admin_v4.add(norm)
-        elif ver == 6:
-            admin_v6.add(norm)
-
-    admin_v4.add("127.0.0.1")
-    admin_v6.add("::1")
-
-    trusted_v4 = set()
-    trusted_v6 = set()
-    for item in cfg.get("trusted", {}).get("entries", []):
-        ip = item.get("ip", "")
-        norm, ver = normalize_ip(ip)
-        if ver == 4:
-            trusted_v4.add(norm)
-        elif ver == 6:
-            trusted_v6.add(norm)
-
-    http_v4 = set()
-    http_v6 = set()
-    for item in cfg.get("http_only", {}).get("entries", []):
-        ip = item.get("ip", "")
-        norm, ver = normalize_ip(ip)
-        if ver == 4:
-            http_v4.add(norm)
-        elif ver == 6:
-            http_v6.add(norm)
-
-    mail_v4 = set()
-    mail_v6 = set()
-    for item in cfg.get("mail_clients", {}).get("entries", []):
-        ip = item.get("ip", "")
-        norm, ver = normalize_ip(ip)
-        if ver == 4:
-            mail_v4.add(norm)
-        elif ver == 6:
-            mail_v6.add(norm)
-
-    # 2. GeoIP Processing
-    geo_cfg = cfg.get("geoip", {})
-    geo_enabled = geo_cfg.get("enabled", True)
-
-    # Global Blacklist
-    geo_bl_v4 = set()
-    geo_bl_v6 = set()
-    if geo_enabled:
-        for item in geo_cfg.get("global_blacklist", []):
-            cc = item.get("country", "")
-            if cc:
-                v4, v6 = get_country_cidrs(cc)
-                geo_bl_v4.update(v4)
-                geo_bl_v6.update(v6)
-
-    # Per-Group GeoIP Sets
-    group_geo = geo_cfg.get("groups", {})
-
-    def get_group_geo_cidrs(gname):
-        wl_v4, wl_v6 = set(), set()
-        bl_v4, bl_v6 = set(), set()
-        if not geo_enabled:
-            return "disabled", wl_v4, wl_v6, bl_v4, bl_v6
-
-        gdata = group_geo.get(gname, {})
-        mode = gdata.get("mode", "disabled").lower()
-        if mode == "whitelist":
-            for item in gdata.get("countries", []):
-                cc = item.get("country", "")
-                if cc:
-                    v4, v6 = get_country_cidrs(cc)
-                    wl_v4.update(v4)
-                    wl_v6.update(v6)
-        elif mode == "blacklist":
-            for item in gdata.get("countries", []):
-                cc = item.get("country", "")
-                if cc:
-                    v4, v6 = get_country_cidrs(cc)
-                    bl_v4.update(v4)
-                    bl_v6.update(v6)
-        return mode, wl_v4, wl_v6, bl_v4, bl_v6
-
-    http_geo_mode, http_gwl_v4, http_gwl_v6, http_gbl_v4, http_gbl_v6 = get_group_geo_cidrs("http_only")
-    mail_geo_mode, mail_gwl_v4, mail_gwl_v6, mail_gbl_v4, mail_gbl_v6 = get_group_geo_cidrs("mail_clients")
-    trust_geo_mode, trust_gwl_v4, trust_gwl_v6, trust_gbl_v4, trust_gbl_v6 = get_group_geo_cidrs("trusted")
-    pub_geo_mode, pub_gwl_v4, pub_gwl_v6, pub_gbl_v4, pub_gbl_v6 = get_group_geo_cidrs("public_ports")
-
-    # 3. Write IPSet XMLs
-    write_firewalld_ipset_xml("efa_admins", "EFA-NG Admins (Full Access)", admin_v4, family="inet")
-    if admin_v6:
-        write_firewalld_ipset_xml("efa_admins6", "EFA-NG Admins IPv6 (Full Access)", admin_v6, family="inet6")
-    
-    write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services", trusted_v4 or ["127.0.0.1"], family="inet")
-    write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", http_v4 or ["127.0.0.1"], family="inet")
-    write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access", mail_v4 or ["127.0.0.1"], family="inet")
-
-    # Write GeoIP IPSet XMLs
-    if geo_bl_v4:
-        write_firewalld_ipset_xml("efa_geo_block_v4", "EFA-NG GeoIP Global Blacklist IPv4", geo_bl_v4, family="inet")
-    if geo_bl_v6:
-        write_firewalld_ipset_xml("efa_geo_block_v6", "EFA-NG GeoIP Global Blacklist IPv6", geo_bl_v6, family="inet6")
-
-    # Group GeoIP IPSets
-    if http_gwl_v4:
-        write_firewalld_ipset_xml("efa_geo_http_wl_v4", "EFA-NG GeoIP HTTP Whitelist IPv4", http_gwl_v4, family="inet")
-    if http_gwl_v6:
-        write_firewalld_ipset_xml("efa_geo_http_wl_v6", "EFA-NG GeoIP HTTP Whitelist IPv6", http_gwl_v6, family="inet6")
-    if http_gbl_v4:
-        write_firewalld_ipset_xml("efa_geo_http_bl_v4", "EFA-NG GeoIP HTTP Blacklist IPv4", http_gbl_v4, family="inet")
-
-    if mail_gwl_v4:
-        write_firewalld_ipset_xml("efa_geo_mail_wl_v4", "EFA-NG GeoIP Mail Whitelist IPv4", mail_gwl_v4, family="inet")
-    if mail_gwl_v6:
-        write_firewalld_ipset_xml("efa_geo_mail_wl_v6", "EFA-NG GeoIP Mail Whitelist IPv6", mail_gwl_v6, family="inet6")
-    if mail_gbl_v4:
-        write_firewalld_ipset_xml("efa_geo_mail_bl_v4", "EFA-NG GeoIP Mail Blacklist IPv4", mail_gbl_v4, family="inet")
-
-    if trust_gwl_v4:
-        write_firewalld_ipset_xml("efa_geo_trust_wl_v4", "EFA-NG GeoIP Trusted Whitelist IPv4", trust_gwl_v4, family="inet")
-    if trust_gbl_v4:
-        write_firewalld_ipset_xml("efa_geo_trust_bl_v4", "EFA-NG GeoIP Trusted Blacklist IPv4", trust_gbl_v4, family="inet")
-
-    if pub_gwl_v4:
-        write_firewalld_ipset_xml("efa_geo_pub_wl_v4", "EFA-NG GeoIP Public Whitelist IPv4", pub_gwl_v4, family="inet")
-    if pub_gbl_v4:
-        write_firewalld_ipset_xml("efa_geo_pub_bl_v4", "EFA-NG GeoIP Public Blacklist IPv4", pub_gbl_v4, family="inet")
-
-    # 4. Generate public.xml
-    pub_lines = ['<?xml version="1.0" encoding="utf-8"?>']
-    pub_lines.append('<zone>')
-    pub_lines.append('  <short>Public</short>')
-    pub_lines.append('  <description>EFA-NG Protected Zone</description>')
-    pub_lines.append('  <service name="dhcpv6-client"/>')
-
-    # If public_ports has port 25 and no GeoIP Whitelist restricting it, add smtp service
-    has_port_25 = any(str(p.get("port", "")).strip() == "25" for p in cfg.get("public_ports", []))
-    if has_port_25 and pub_geo_mode != "whitelist":
-        pub_lines.append('  <service name="smtp"/>')
-
-    # Other open public ports (if no public whitelist)
-    for p in cfg.get("public_ports", []):
-        port_num = str(p.get("port", "")).strip()
-        proto = p.get("proto", "tcp").lower()
-        if port_num and port_num != "25" and pub_geo_mode != "whitelist":
-            pub_lines.append(f'  <port port="{port_num}" protocol="{proto}"/>')
-
-    # Rule: Admins (Full Access) - Takes precedence
-    pub_lines.append('  <rule family="ipv4">')
-    pub_lines.append('    <source ipset="efa_admins"/>')
-    pub_lines.append('    <accept/>')
-    pub_lines.append('  </rule>')
-    if admin_v6:
-        pub_lines.append('  <rule family="ipv6">')
-        pub_lines.append('    <source ipset="efa_admins6"/>')
-        pub_lines.append('    <accept/>')
-        pub_lines.append('  </rule>')
-
-    # Rule: Global GeoIP Blacklist (Drop all traffic across all ports)
-    if geo_bl_v4:
-        pub_lines.append('  <rule family="ipv4">')
-        pub_lines.append('    <source ipset="efa_geo_block_v4"/>')
-        pub_lines.append('    <drop/>')
-        pub_lines.append('  </rule>')
-    if geo_bl_v6:
-        pub_lines.append('  <rule family="ipv6">')
-        pub_lines.append('    <source ipset="efa_geo_block_v6"/>')
-        pub_lines.append('    <drop/>')
-        pub_lines.append('  </rule>')
-
-    # Rule: Group-specific GeoIP Blacklists (Drop)
-    # HTTP Group BL
-    if http_gbl_v4:
-        for hp in cfg.get("http_only", {}).get("ports", [{"port": "80", "proto": "tcp"}, {"port": "443", "proto": "tcp"}]):
-            pnum = str(hp.get("port", "")).strip()
-            prt = hp.get("proto", "tcp").lower()
-            if pnum:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_http_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
-
-    # Mail Clients Group BL
-    if mail_gbl_v4:
-        for mp in cfg.get("mail_clients", {}).get("ports", [{"port": "110", "proto": "tcp"}, {"port": "143", "proto": "tcp"}, {"port": "587", "proto": "tcp"}, {"port": "993", "proto": "tcp"}, {"port": "995", "proto": "tcp"}]):
-            pnum = str(mp.get("port", "")).strip()
-            prt = mp.get("proto", "tcp").lower()
-            if pnum:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_mail_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
-
-    # Trusted Group BL
-    if trust_gbl_v4:
-        for tp in cfg.get("trusted", {}).get("ports", [{"port": "3306", "proto": "tcp"}, {"port": "10050", "proto": "tcp"}]):
-            pnum = str(tp.get("port", "")).strip()
-            prt = tp.get("proto", "tcp").lower()
-            if pnum:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_trust_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
-
-    # Public Group BL
-    if pub_gbl_v4:
-        for pp in cfg.get("public_ports", []):
-            pnum = str(pp.get("port", "")).strip()
-            prt = pp.get("proto", "tcp").lower()
-            if pnum:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_pub_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
-
-    # Rule: Trusted Ports (Static ACL + GeoIP Whitelist)
-    trusted_ports = cfg.get("trusted", {}).get("ports", [{"port": "3306", "proto": "tcp"}, {"port": "10050", "proto": "tcp"}])
-    for tp in trusted_ports:
-        port_num = str(tp.get("port", "")).strip()
-        proto = tp.get("proto", "tcp").lower()
-        if port_num:
-            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_trusted"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-            if trust_gwl_v4:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_trust_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-
-    # Rule: HTTP / HTTPS Ports (Static ACL + GeoIP Whitelist)
-    http_ports = cfg.get("http_only", {}).get("ports", [{"port": "80", "proto": "tcp"}, {"port": "443", "proto": "tcp"}])
-    for hp in http_ports:
-        port_num = str(hp.get("port", "")).strip()
-        proto = hp.get("proto", "tcp").lower()
-        if port_num:
-            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_http"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-            if http_gwl_v4:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_http_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-            if http_gwl_v6:
-                pub_lines.append(f'  <rule family="ipv6"><source ipset="efa_geo_http_wl_v6"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-
-    # Rule: Mail Clients Ports (Static ACL + GeoIP Whitelist)
-    mail_ports = cfg.get("mail_clients", {}).get("ports", [{"port": "110", "proto": "tcp"}, {"port": "143", "proto": "tcp"}, {"port": "587", "proto": "tcp"}, {"port": "993", "proto": "tcp"}, {"port": "995", "proto": "tcp"}])
-    for mp in mail_ports:
-        port_num = str(mp.get("port", "")).strip()
-        proto = mp.get("proto", "tcp").lower()
-        if port_num:
-            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_mail"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-            if mail_gwl_v4:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_mail_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-            if mail_gwl_v6:
-                pub_lines.append(f'  <rule family="ipv6"><source ipset="efa_geo_mail_wl_v6"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-
-    # Rule: Public Ports (if Whitelisted by Country)
-    if pub_geo_mode == "whitelist" and pub_gwl_v4:
-        for pp in cfg.get("public_ports", []):
-            port_num = str(pp.get("port", "")).strip()
-            proto = pp.get("proto", "tcp").lower()
-            if port_num:
-                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_pub_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
-
-    pub_lines.append('  <forward/>')
-    pub_lines.append('</zone>\n')
-
-    with open("/etc/firewalld/zones/public.xml", "w", encoding="utf-8") as f:
-        f.write("\n".join(pub_lines))
-    os.chmod("/etc/firewalld/zones/public.xml", 0o644)
-
-    if os.path.exists("/etc/firewalld/zones/trusted.xml"):
-        try:
-            os.remove("/etc/firewalld/zones/trusted.xml")
-        except Exception:
-            pass
-
-    # Reload firewalld
-    res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
-    if res.returncode == 0:
-        if not silent:
-            if RICH_AVAILABLE:
-                console.print("[bold green]● Firewall rules applied and reloaded successfully.[/]")
-            else:
-                print("[eFa-Firewall] Firewall rules applied and reloaded successfully.")
-        return True
+        # Open / Unrestricted Mode
+        nft_lines.extend([
+            "    chain input {",
+            "        type filter hook input priority filter; policy accept;",
+            "    }",
+            "    chain forward {",
+            "        type filter hook forward priority filter; policy accept;",
+            "    }",
+            "    chain output {",
+            "        type filter hook output priority filter; policy accept;",
+            "    }",
+            "}"
+        ])
     else:
+        # 1. Parse Static IPs
+        admin_v4, admin_v6 = set(), set()
+        for item in cfg.get("admins", []):
+            norm, ver = normalize_ip(item.get("ip", ""))
+            if ver == 4: admin_v4.add(norm)
+            elif ver == 6: admin_v6.add(norm)
+        admin_v4.add("127.0.0.1")
+        admin_v6.add("::1")
+
+        trusted_v4, trusted_v6 = set(), set()
+        for item in cfg.get("trusted", {}).get("entries", []):
+            norm, ver = normalize_ip(item.get("ip", ""))
+            if ver == 4: trusted_v4.add(norm)
+            elif ver == 6: trusted_v6.add(norm)
+
+        http_v4, http_v6 = set(), set()
+        for item in cfg.get("http_only", {}).get("entries", []):
+            norm, ver = normalize_ip(item.get("ip", ""))
+            if ver == 4: http_v4.add(norm)
+            elif ver == 6: http_v6.add(norm)
+
+        mail_v4, mail_v6 = set(), set()
+        for item in cfg.get("mail_clients", {}).get("entries", []):
+            norm, ver = normalize_ip(item.get("ip", ""))
+            if ver == 4: mail_v4.add(norm)
+            elif ver == 6: mail_v6.add(norm)
+
+        # 2. Parse GeoIP
+        geo_cfg = cfg.get("geoip", {})
+        geo_enabled = geo_cfg.get("enabled", True)
+
+        geo_bl_v4, geo_bl_v6 = set(), set()
+        if geo_enabled:
+            for item in geo_cfg.get("global_blacklist", []):
+                cc = item.get("country", "")
+                if cc:
+                    v4, v6 = get_country_cidrs(cc)
+                    geo_bl_v4.update(v4)
+                    geo_bl_v6.update(v6)
+
+        group_geo = geo_cfg.get("groups", {})
+        def get_grp_geo(gname):
+            gwl_v4, gwl_v6 = set(), set()
+            gbl_v4, gbl_v6 = set(), set()
+            if not geo_enabled: return "disabled", gwl_v4, gwl_v6, gbl_v4, gbl_v6
+            gdata = group_geo.get(gname, {})
+            mode = gdata.get("mode", "disabled").lower()
+            for it in gdata.get("countries", []):
+                cc = it.get("country", "")
+                if cc:
+                    v4, v6 = get_country_cidrs(cc)
+                    if mode == "whitelist":
+                        gwl_v4.update(v4); gwl_v6.update(v6)
+                    elif mode == "blacklist":
+                        gbl_v4.update(v4); gbl_v6.update(v6)
+            return mode, gwl_v4, gwl_v6, gbl_v4, gbl_v6
+
+        http_mode, http_gwl_v4, http_gwl_v6, http_gbl_v4, http_gbl_v6 = get_grp_geo("http_only")
+        mail_mode, mail_gwl_v4, mail_gwl_v6, mail_gbl_v4, mail_gbl_v6 = get_grp_geo("mail_clients")
+        trust_mode, trust_gwl_v4, trust_gwl_v6, trust_gbl_v4, trust_gbl_v6 = get_grp_geo("trusted")
+        pub_mode, pub_gwl_v4, pub_gwl_v6, pub_gbl_v4, pub_gbl_v6 = get_grp_geo("public_ports")
+
+        # 3. Add NFTables Sets
+        nft_lines.extend(format_nft_set("admins_v4", "ipv4_addr", admin_v4))
+        nft_lines.extend(format_nft_set("admins_v6", "ipv6_addr", admin_v6))
+        nft_lines.extend(format_nft_set("trusted_v4", "ipv4_addr", trusted_v4))
+        nft_lines.extend(format_nft_set("trusted_v6", "ipv6_addr", trusted_v6))
+        nft_lines.extend(format_nft_set("http_v4", "ipv4_addr", http_v4))
+        nft_lines.extend(format_nft_set("http_v6", "ipv6_addr", http_v6))
+        nft_lines.extend(format_nft_set("mail_v4", "ipv4_addr", mail_v4))
+        nft_lines.extend(format_nft_set("mail_v6", "ipv6_addr", mail_v6))
+
+        if geo_bl_v4 or geo_enabled:
+            nft_lines.extend(format_nft_set("geo_block_v4", "ipv4_addr", geo_bl_v4))
+        if geo_bl_v6 or geo_enabled:
+            nft_lines.extend(format_nft_set("geo_block_v6", "ipv6_addr", geo_bl_v6))
+
+        if http_mode == "whitelist":
+            nft_lines.extend(format_nft_set("geo_http_wl_v4", "ipv4_addr", http_gwl_v4))
+            nft_lines.extend(format_nft_set("geo_http_wl_v6", "ipv6_addr", http_gwl_v6))
+        elif http_mode == "blacklist":
+            nft_lines.extend(format_nft_set("geo_http_bl_v4", "ipv4_addr", http_gbl_v4))
+            nft_lines.extend(format_nft_set("geo_http_bl_v6", "ipv6_addr", http_gbl_v6))
+
+        if mail_mode == "whitelist":
+            nft_lines.extend(format_nft_set("geo_mail_wl_v4", "ipv4_addr", mail_gwl_v4))
+            nft_lines.extend(format_nft_set("geo_mail_wl_v6", "ipv6_addr", mail_gwl_v6))
+        elif mail_mode == "blacklist":
+            nft_lines.extend(format_nft_set("geo_mail_bl_v4", "ipv4_addr", mail_gbl_v4))
+            nft_lines.extend(format_nft_set("geo_mail_bl_v6", "ipv6_addr", mail_gbl_v6))
+
+        if trust_mode == "whitelist":
+            nft_lines.extend(format_nft_set("geo_trust_wl_v4", "ipv4_addr", trust_gwl_v4))
+            nft_lines.extend(format_nft_set("geo_trust_wl_v6", "ipv6_addr", trust_gwl_v6))
+        elif trust_mode == "blacklist":
+            nft_lines.extend(format_nft_set("geo_trust_bl_v4", "ipv4_addr", trust_gbl_v4))
+            nft_lines.extend(format_nft_set("geo_trust_bl_v6", "ipv6_addr", trust_gbl_v6))
+
+        if pub_mode == "whitelist":
+            nft_lines.extend(format_nft_set("geo_pub_wl_v4", "ipv4_addr", pub_gwl_v4))
+            nft_lines.extend(format_nft_set("geo_pub_wl_v6", "ipv6_addr", pub_gwl_v6))
+        elif pub_mode == "blacklist":
+            nft_lines.extend(format_nft_set("geo_pub_bl_v4", "ipv4_addr", pub_gbl_v4))
+            nft_lines.extend(format_nft_set("geo_pub_bl_v6", "ipv6_addr", pub_gbl_v6))
+
+        # Helper to format port strings
+        def extract_ports(port_list, proto="tcp"):
+            p_nums = []
+            for p in port_list:
+                if p.get("proto", "tcp").lower() == proto.lower():
+                    p_num = str(p.get("port", "")).strip()
+                    if p_num: p_nums.append(p_num)
+            return p_nums
+
+        # 4. Chain Input Rules
+        nft_lines.append("")
+        nft_lines.append("    chain input {")
+        nft_lines.append("        type filter hook input priority filter; policy drop;")
+        nft_lines.append("")
+        nft_lines.append("        # 1. Established & Related state")
+        nft_lines.append("        ct state established,related accept")
+        nft_lines.append("        ct state invalid drop")
+        nft_lines.append("")
+        nft_lines.append("        # 2. Local loopback")
+        nft_lines.append('        iif "lo" accept')
+        nft_lines.append("")
+
+        if allow_ping:
+            nft_lines.append("        # 3. ICMP / Ping")
+            nft_lines.append("        ip protocol icmp accept")
+            nft_lines.append("        ip6 nexthdr ipv6-icmp accept")
+            nft_lines.append("")
+
+        nft_lines.append("        # 4. DHCPv6 Client")
+        nft_lines.append("        ip6 daddr fe80::/64 udp dport 546 accept")
+        nft_lines.append("")
+
+        nft_lines.append("        # 5. Admins Full Access (Takes precedence)")
+        nft_lines.append("        ip saddr @admins_v4 accept")
+        nft_lines.append("        ip6 saddr @admins_v6 accept")
+        nft_lines.append("")
+
+        if geo_bl_v4 or geo_bl_v6:
+            nft_lines.append("        # 6. Global Country Blacklist (Drop on ALL Ports)")
+            if geo_bl_v4: nft_lines.append("        ip saddr @geo_block_v4 drop")
+            if geo_bl_v6: nft_lines.append("        ip6 saddr @geo_block_v6 drop")
+            nft_lines.append("")
+
+        # 7. Group Blacklists
+        http_tcp_ports = extract_ports(cfg.get("http_only", {}).get("ports", [{"port": "80"}, {"port": "443"}]), "tcp")
+        mail_tcp_ports = extract_ports(cfg.get("mail_clients", {}).get("ports", [{"port": "110"}, {"port": "143"}, {"port": "587"}, {"port": "993"}, {"port": "995"}]), "tcp")
+        trust_tcp_ports = extract_ports(cfg.get("trusted", {}).get("ports", [{"port": "3306"}, {"port": "10050"}]), "tcp")
+        pub_tcp_ports = extract_ports(cfg.get("public_ports", [{"port": "25"}]), "tcp")
+
+        if http_mode == "blacklist" and (http_gbl_v4 or http_gbl_v6) and http_tcp_ports:
+            nft_lines.append(f"        # Group Blacklist: HTTP")
+            p_str = ", ".join(http_tcp_ports)
+            if http_gbl_v4: nft_lines.append(f"        ip saddr @geo_http_bl_v4 tcp dport {{ {p_str} }} drop")
+            if http_gbl_v6: nft_lines.append(f"        ip6 saddr @geo_http_bl_v6 tcp dport {{ {p_str} }} drop")
+
+        if mail_mode == "blacklist" and (mail_gbl_v4 or mail_gbl_v6) and mail_tcp_ports:
+            nft_lines.append(f"        # Group Blacklist: Mail Clients")
+            p_str = ", ".join(mail_tcp_ports)
+            if mail_gbl_v4: nft_lines.append(f"        ip saddr @geo_mail_bl_v4 tcp dport {{ {p_str} }} drop")
+            if mail_gbl_v6: nft_lines.append(f"        ip6 saddr @geo_mail_bl_v6 tcp dport {{ {p_str} }} drop")
+
+        if trust_mode == "blacklist" and (trust_gbl_v4 or trust_gbl_v6) and trust_tcp_ports:
+            nft_lines.append(f"        # Group Blacklist: Trusted")
+            p_str = ", ".join(trust_tcp_ports)
+            if trust_gbl_v4: nft_lines.append(f"        ip saddr @geo_trust_bl_v4 tcp dport {{ {p_str} }} drop")
+            if trust_gbl_v6: nft_lines.append(f"        ip6 saddr @geo_trust_bl_v6 tcp dport {{ {p_str} }} drop")
+
+        if pub_mode == "blacklist" and (pub_gbl_v4 or pub_gbl_v6) and pub_tcp_ports:
+            nft_lines.append(f"        # Group Blacklist: Public Ports")
+            p_str = ", ".join(pub_tcp_ports)
+            if pub_gbl_v4: nft_lines.append(f"        ip saddr @geo_pub_bl_v4 tcp dport {{ {p_str} }} drop")
+            if pub_gbl_v6: nft_lines.append(f"        ip6 saddr @geo_pub_bl_v6 tcp dport {{ {p_str} }} drop")
+
+        # 8. Public Ports
+        if pub_tcp_ports:
+            p_str = ", ".join(pub_tcp_ports)
+            if pub_mode == "whitelist":
+                nft_lines.append("        # Public Ports (Restricted to Whitelist Countries)")
+                if pub_gwl_v4: nft_lines.append(f"        ip saddr @geo_pub_wl_v4 tcp dport {{ {p_str} }} accept")
+                if pub_gwl_v6: nft_lines.append(f"        ip6 saddr @geo_pub_wl_v6 tcp dport {{ {p_str} }} accept")
+            else:
+                nft_lines.append(f"        # Public World Ports (Open to 0.0.0.0/0)")
+                nft_lines.append(f"        tcp dport {{ {p_str} }} accept")
+
+        # 9. HTTP / HTTPS Web Management
+        if http_tcp_ports:
+            p_str = ", ".join(http_tcp_ports)
+            nft_lines.append("        # HTTP / HTTPS Web Management")
+            nft_lines.append(f"        ip saddr @http_v4 tcp dport {{ {p_str} }} accept")
+            nft_lines.append(f"        ip6 saddr @http_v6 tcp dport {{ {p_str} }} accept")
+            if http_mode == "whitelist":
+                if http_gwl_v4: nft_lines.append(f"        ip saddr @geo_http_wl_v4 tcp dport {{ {p_str} }} accept")
+                if http_gwl_v6: nft_lines.append(f"        ip6 saddr @geo_http_wl_v6 tcp dport {{ {p_str} }} accept")
+
+        # 10. Mail Clients Access
+        if mail_tcp_ports:
+            p_str = ", ".join(mail_tcp_ports)
+            nft_lines.append("        # Mail Clients & Submission")
+            nft_lines.append(f"        ip saddr @mail_v4 tcp dport {{ {p_str} }} accept")
+            nft_lines.append(f"        ip6 saddr @mail_v6 tcp dport {{ {p_str} }} accept")
+            if mail_mode == "whitelist":
+                if mail_gwl_v4: nft_lines.append(f"        ip saddr @geo_mail_wl_v4 tcp dport {{ {p_str} }} accept")
+                if mail_gwl_v6: nft_lines.append(f"        ip6 saddr @geo_mail_wl_v6 tcp dport {{ {p_str} }} accept")
+
+        # 11. Trusted Services
+        if trust_tcp_ports:
+            p_str = ", ".join(trust_tcp_ports)
+            nft_lines.append("        # Trusted Services (MariaDB, Zabbix)")
+            nft_lines.append(f"        ip saddr @trusted_v4 tcp dport {{ {p_str} }} accept")
+            nft_lines.append(f"        ip6 saddr @trusted_v6 tcp dport {{ {p_str} }} accept")
+            if trust_mode == "whitelist":
+                if trust_gwl_v4: nft_lines.append(f"        ip saddr @geo_trust_wl_v4 tcp dport {{ {p_str} }} accept")
+                if trust_gwl_v6: nft_lines.append(f"        ip6 saddr @geo_trust_wl_v6 tcp dport {{ {p_str} }} accept")
+
+        nft_lines.append("    }")
+        nft_lines.append("")
+        nft_lines.append("    chain forward {")
+        nft_lines.append("        type filter hook forward priority filter; policy accept;")
+        nft_lines.append("    }")
+        nft_lines.append("")
+        nft_lines.append("    chain output {")
+        nft_lines.append("        type filter hook output priority filter; policy accept;")
+        nft_lines.append("    }")
+        nft_lines.append("}")
+
+    # Write file
+    os.makedirs(os.path.dirname(NFT_EFA_FILE), exist_ok=True)
+    tmp_file = NFT_EFA_FILE + ".tmp"
+    with open(tmp_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(nft_lines) + "\n")
+    os.chmod(tmp_file, 0o644)
+
+    # Syntax check
+    check_res = subprocess.run(["nft", "-c", "-f", tmp_file], capture_output=True, text=True)
+    if check_res.returncode != 0:
         if RICH_AVAILABLE:
-            console.print(f"[bold red]ERROR:[/] Firewall reload returned error:\n{res.stderr}")
+            console.print(f"[bold red]ERROR:[/] NFTables syntax verification failed:\n{check_res.stderr}")
         else:
-            print(f"[ERROR] Firewall reload returned error:\n{res.stderr}")
+            print(f"[ERROR] NFTables syntax verification failed:\n{check_res.stderr}")
+        if os.path.exists(tmp_file): os.remove(tmp_file)
         return False
 
-# ----------------- Status and List Displays -----------------
-def show_status(cfg):
-    is_fw_active = False
-    try:
-        res = subprocess.run(["firewall-cmd", "--state"], capture_output=True, text=True)
-        if "running" in res.stdout:
-            is_fw_active = True
-    except Exception:
-        pass
+    os.replace(tmp_file, NFT_EFA_FILE)
 
+    # Apply configuration atomically
+    apply_res = subprocess.run(["nft", "-f", NFT_EFA_FILE], capture_output=True, text=True)
+    if apply_res.returncode != 0:
+        if RICH_AVAILABLE:
+            console.print(f"[bold red]ERROR:[/] Failed to apply NFTables rules:\n{apply_res.stderr}")
+        else:
+            print(f"[ERROR] Failed to apply NFTables rules:\n{apply_res.stderr}")
+        return False
+
+    # Setup boot persistence and systemd service
+    setup_nftables_persistence()
+
+    if not silent:
+        if RICH_AVAILABLE:
+            console.print("[bold green]● NFTables firewall rules generated and applied successfully.[/]")
+        else:
+            print("[eFa-Firewall] NFTables firewall rules generated and applied successfully.")
+    return True
+
+# ----------------- Status and List Displays -----------------
+def is_nftables_active():
+    try:
+        res = subprocess.run(["nft", "list", "table", "inet", "efa"], capture_output=True, text=True)
+        return res.returncode == 0
+    except Exception:
+        return False
+
+def show_status(cfg):
+    is_active = is_nftables_active()
     enabled = cfg.get("enabled", True)
     
     if not RICH_AVAILABLE:
-        print("Firewall Daemon:", "ACTIVE" if is_fw_active else "INACTIVE")
+        print("Firewall Engine: NFTables (Native)")
+        print("Status:", "ACTIVE" if is_active else "INACTIVE")
         print("Mode:", "PROTECTED" if enabled else "OPEN")
         return
 
     # Header Panel
     header_text = Text()
     header_text.append("EFA-NG FIREWALL & ACCESS CONTROL MANAGER", style="bold cyan")
-    header_text.append("\nCentOS Stream 10  •  NFTables / FirewallD / GeoIP Engine  •  https://efa-ng.space.ua", style="dim white")
+    header_text.append("\nNative Linux NFTables Engine  •  CentOS / RHEL / Debian / Ubuntu  •  https://efa-ng.space.ua", style="dim white")
     console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
 
     # Status Cards
-    fw_badge = "[bold green]● ACTIVE (Running)[/]" if is_fw_active else "[bold red]○ INACTIVE (Stopped)[/]"
+    fw_badge = "[bold green]● ACTIVE (Running in Kernel)[/]" if is_active else "[bold red]○ INACTIVE (Not Applied)[/]"
     mode_badge = "[bold green]● PROTECTED (Restricted ACL)[/]" if enabled else "[bold yellow]○ UNRESTRICTED (Open Mode)[/]"
     
     num_admins = len(cfg.get("admins", []))
@@ -774,7 +778,8 @@ def show_status(cfg):
     summary_table.add_column("Key", style="bold cyan", width=32, min_width=32, max_width=32, no_wrap=True)
     summary_table.add_column("Value", style="bold white", ratio=1)
 
-    summary_table.add_row("●  Firewall Service", fw_badge)
+    summary_table.add_row("●  Firewall Engine", "[bold green]NFTables (Direct Netfilter)[/]")
+    summary_table.add_row("●  Kernel Table State", fw_badge)
     summary_table.add_row("●  Protection Mode", mode_badge)
     summary_table.add_row("●  Admins (All Ports Open)", f"[bold white]{num_admins}[/] networks / hosts")
     summary_table.add_row("●  Trusted (DB & Zabbix)", f"[bold white]{num_trusted}[/] networks (Ports: 3306, 10050)")
@@ -918,7 +923,6 @@ def cli_add_entry(cfg, group, ip, comment=""):
             print(f"[ERROR] Unknown group '{group}'")
         return False
 
-    # Check if already exists
     for item in entries:
         if item.get("ip") == norm:
             item["comment"] = comment or item.get("comment", "")
@@ -981,12 +985,11 @@ def cli_del_entry(cfg, group, ip):
             print(f"[ERROR] Entry {target} not found in {group}")
         return False
 
-# ----------------- Interactive Rich TUI Submenu -----------------
+# ----------------- Interactive Rich TUI Submenus -----------------
 def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", border_style="cyan"):
     while True:
         os.system("clear")
         
-        # Submenu Header
         header_text = Text()
         header_text.append(f"{title}\n", style=header_style)
         header_text.append(desc, style="dim white")
@@ -1102,7 +1105,6 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
                 console.print("[bold red]Invalid entry number.[/]")
                 Prompt.ask("Press Enter to continue...")
 
-# ----------------- Interactive GeoIP TUI Submenus -----------------
 def manage_global_blacklist_tui(cfg):
     while True:
         os.system("clear")
@@ -1151,13 +1153,11 @@ def manage_global_blacklist_tui(cfg):
             cname = get_country_name(cc_in)
             comm = Prompt.ask(f"Enter description / reason (Country: {cname})", default=f"{cname} (Blocked globally)").strip()
             
-            # Fetch zone files
             console.print(f"[cyan]Fetching CIDRs for {cc_in} ({cname})...[/]")
             fetch_country_zone(cc_in)
             v4, v6 = get_country_cidrs(cc_in)
             console.print(f"[green]✔ Cached {len(v4)} IPv4 CIDRs and {len(v6)} IPv6 CIDRs for {cc_in}.[/]")
 
-            # Add or update
             found = False
             for it in entries:
                 if it.get("country", "").upper() == cc_in:
@@ -1203,7 +1203,6 @@ def manage_group_geoip_tui(cfg, gkey, gname, ports_desc):
         header_text.append(f"Target Ports: {ports_desc}  •  Current Mode: {mode.upper()}", style="dim white")
         console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
 
-        # Countries Table
         t = Table(box=box.ROUNDED, header_style="bold cyan", border_style="cyan", expand=True)
         t.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
         t.add_column("Country / Code", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
@@ -1343,7 +1342,6 @@ def interactive_tui():
         os.system("clear")
         show_status(cfg)
 
-        # Main Navigation Menu
         menu_table = Table(box=box.ROUNDED, show_header=False, expand=True, border_style="cyan")
         menu_table.add_column("Key", style="bold cyan", width=8, justify="center")
         menu_table.add_column("Category / Action", style="bold white", width=36)
@@ -1357,7 +1355,7 @@ def interactive_tui():
         menu_table.add_row("[ 6 ]", "● Manage GeoIP & Country ACL", "Global Blacklist & Per-Group Country Filters (WL/BL)")
         menu_table.add_row("", "", "")
         menu_table.add_row("[ 7 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
-        menu_table.add_row("[ 8 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
+        menu_table.add_row("[ 8 ]", "● Apply Rules & Reload Now", "Regenerate and reload native NFTables rules")
         menu_table.add_row("[ 9 ]", "● Update GeoIP Database Now", "Download latest country CIDR zone files")
         
         mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted ACL)"
@@ -1410,10 +1408,10 @@ def main():
             print("[ERROR] eFa-Firewall must be run as root.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="EFA-NG Firewall & Access Control Manager (Rich TUI & GeoIP Edition)")
-    parser.add_argument("--apply", action="store_true", help="Generate and apply firewall rules from config")
+    parser = argparse.ArgumentParser(description="EFA-NG Firewall & Access Control Manager (Native NFTables & GeoIP)")
+    parser.add_argument("--apply", action="store_true", help="Generate and apply native NFTables rules from config")
     parser.add_argument("--status", action="store_true", help="Show current firewall status")
-    parser.add_argument("--list", action="store_true", help="List all firewall rules, IPs and comments in rich table")
+    parser.add_argument("--list", action="store_true", help="List all firewall rules, IPs, GeoIP and comments in rich table")
     parser.add_argument("--enable", action="store_true", help="Enable firewall restriction mode")
     parser.add_argument("--disable", action="store_true", help="Disable firewall restriction mode (open mode)")
     parser.add_argument("--add", nargs=3, metavar=("GROUP", "IP", "COMMENT"), help="Add IP to group (admins, trusted, http_only, mail_clients)")

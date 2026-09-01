@@ -84,8 +84,8 @@ Requires: sudo >= 1.9.5p2-7
     # sudo                                       # base    # eFa
 Requires: chrony >= 4.2-1
     # chrony                                     # base    # eFa
-Requires: firewalld >= 1.1.1-3
-    # firewalld                                  # base    # eFa
+Requires: nftables >= 0.9.8
+    # nftables                                   # base    # eFa-Firewall
 Requires: python3-rich
     # rich TUI & CLI                             # epel    # eFa-Firewall
 Requires: python3-certbot-apache >= 2.1.0-1
