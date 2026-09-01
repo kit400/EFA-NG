@@ -1,0 +1,644 @@
+#!/usr/bin/env python3
+# +--------------------------------------------------------------------+
+# EFA-NG Firewall & Access Control Manager
+# Version 20260901
+# +--------------------------------------------------------------------+
+# Copyright (C) 2026  https://efa-ng.space.ua
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# +--------------------------------------------------------------------+
+
+import sys
+import os
+import json
+import shutil
+import subprocess
+import ipaddress
+import argparse
+
+CONFIG_PATH = "/etc/eFa/firewall.conf"
+DEFAULT_CONFIG_PATH = "/etc/eFa/firewall.conf.default"
+
+# ANSI Color codes
+C_RESET = "\033[00m"
+C_BOLD = "\033[1m"
+C_DIM = "\033[2m"
+C_RED = "\033[00;31m"
+C_GREEN = "\033[00;32m"
+C_YELLOW = "\033[00;33m"
+C_BLUE = "\033[00;34m"
+C_MAGENTA = "\033[00;35m"
+C_CYAN = "\033[00;36m"
+C_WHITE = "\033[01;37m"
+
+def get_default_config():
+    return {
+        "version": "1.0",
+        "enabled": True,
+        "allow_ping": True,
+        "public_ports": [
+            {"port": "25", "proto": "tcp", "comment": "SMTP Mail Server (Public)"}
+        ],
+        "admins": [
+            {"ip": "127.0.0.1", "comment": "Localhost loopback"},
+            {"ip": "195.230.150.128/27", "comment": "Admin Subnet (NOC)"},
+            {"ip": "212.1.66.158", "comment": "Admin External IP"},
+            {"ip": "195.230.150.69", "comment": "EFA-NG Dev Server"}
+        ],
+        "trusted": {
+            "ports": [
+                {"port": "3306", "proto": "tcp", "comment": "MariaDB Database"},
+                {"port": "10050", "proto": "tcp", "comment": "Zabbix Agent"}
+            ],
+            "entries": [
+                {"ip": "195.230.150.0/24", "comment": "Internal Subnet (DB & Monitoring)"}
+            ]
+        },
+        "http_only": {
+            "ports": [
+                {"port": "80", "proto": "tcp", "comment": "HTTP Web Interface"},
+                {"port": "443", "proto": "tcp", "comment": "HTTPS Secure Web Interface"}
+            ],
+            "entries": [
+                {"ip": "195.230.150.128/27", "comment": "NOC Subnet"},
+                {"ip": "212.1.66.0/24", "comment": "Infocom Subnet"},
+                {"ip": "94.101.42.162", "comment": "Remote Web Access 1"},
+                {"ip": "185.239.185.200", "comment": "Remote Web Access 2"},
+                {"ip": "77.235.167.209", "comment": "Remote Web Access 3"},
+                {"ip": "195.230.150.225", "comment": "Remote Web Access 4"},
+                {"ip": "195.230.150.69", "comment": "Dev Server Web Access"}
+            ]
+        }
+    }
+
+def load_config():
+    if os.path.exists(CONFIG_PATH):
+        try:
+            with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"{C_RED}[ERROR]{C_RESET} Failed to parse {CONFIG_PATH}: {e}")
+            sys.exit(1)
+    elif os.path.exists(DEFAULT_CONFIG_PATH):
+        try:
+            with open(DEFAULT_CONFIG_PATH, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                save_config(cfg)
+                return cfg
+        except Exception as e:
+            pass
+    cfg = get_default_config()
+    save_config(cfg)
+    return cfg
+
+def save_config(cfg):
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+    tmp_path = CONFIG_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+    os.replace(tmp_path, CONFIG_PATH)
+    try:
+        os.chmod(CONFIG_PATH, 0o640)
+    except Exception:
+        pass
+
+def normalize_ip(ip_str):
+    ip_str = ip_str.strip()
+    try:
+        net = ipaddress.ip_network(ip_str, strict=False)
+        if net.num_addresses == 1:
+            return str(net.network_address), net.version
+        return str(net), net.version
+    except ValueError:
+        return None, None
+
+def write_firewalld_ipset_xml(name, description, entries, family="inet"):
+    os.makedirs("/etc/firewalld/ipsets", exist_ok=True)
+    xml_file = f"/etc/firewalld/ipsets/{name}.xml"
+    
+    lines = ['<?xml version="1.0" encoding="utf-8"?>']
+    lines.append('<ipset type="hash:net">')
+    lines.append(f'  <short>{name}</short>')
+    lines.append(f'  <description>{description}</description>')
+    if family == "inet6":
+        lines.append('  <option name="family" value="inet6"/>')
+    for e in sorted(entries):
+        lines.append(f'  <entry>{e}</entry>')
+    lines.append('</ipset>\n')
+    
+    with open(xml_file, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    os.chmod(xml_file, 0o644)
+
+def apply_firewall(cfg):
+    print(f"{C_CYAN}[eFa-Firewall]{C_RESET} Generating and applying firewall configuration...")
+    
+    enabled = cfg.get("enabled", True)
+    
+    if not enabled:
+        print(f"{C_YELLOW}[eFa-Firewall]{C_RESET} Firewall protection is DISABLED in configuration. Restoring open public zone...")
+        # Restore open public zone
+        os.makedirs("/etc/firewalld/zones", exist_ok=True)
+        public_xml = """<?xml version="1.0" encoding="utf-8"?>
+<zone>
+  <short>Public</short>
+  <description>EFA-NG Unrestricted Mode</description>
+  <service name="ssh"/>
+  <service name="smtp"/>
+  <service name="dhcpv6-client"/>
+  <service name="http"/>
+  <service name="https"/>
+  <port port="80" protocol="tcp"/>
+  <port port="443" protocol="tcp"/>
+  <port port="587" protocol="tcp"/>
+  <port port="3306" protocol="tcp"/>
+  <port port="10050" protocol="tcp"/>
+  <forward/>
+</zone>
+"""
+        with open("/etc/firewalld/zones/public.xml", "w", encoding="utf-8") as f:
+            f.write(public_xml)
+        
+        # Restore trusted zone
+        trusted_xml = """<?xml version="1.0" encoding="utf-8"?>
+<zone>
+  <short>Trusted</short>
+  <description>All network connections are accepted.</description>
+  <target>ACCEPT</target>
+</zone>
+"""
+        with open("/etc/firewalld/zones/trusted.xml", "w", encoding="utf-8") as f:
+            f.write(trusted_xml)
+
+        res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
+        if res.returncode == 0:
+            print(f"{C_GREEN}[eFa-Firewall]{C_RESET} Firewall successfully set to open mode.")
+            return True
+        else:
+            print(f"{C_RED}[ERROR]{C_RESET} Failed to reload firewalld: {res.stderr}")
+            return False
+
+    # Extract IPs
+    admin_v4 = set()
+    admin_v6 = set()
+    for item in cfg.get("admins", []):
+        ip = item.get("ip", "")
+        norm, ver = normalize_ip(ip)
+        if ver == 4:
+            admin_v4.add(norm)
+        elif ver == 6:
+            admin_v6.add(norm)
+
+    # Always ensure 127.0.0.1 and ::1 are in admins
+    admin_v4.add("127.0.0.1")
+    admin_v6.add("::1")
+
+    trusted_v4 = set()
+    trusted_v6 = set()
+    for item in cfg.get("trusted", {}).get("entries", []):
+        ip = item.get("ip", "")
+        norm, ver = normalize_ip(ip)
+        if ver == 4:
+            trusted_v4.add(norm)
+        elif ver == 6:
+            trusted_v6.add(norm)
+
+    http_v4 = set()
+    http_v6 = set()
+    for item in cfg.get("http_only", {}).get("entries", []):
+        ip = item.get("ip", "")
+        norm, ver = normalize_ip(ip)
+        if ver == 4:
+            http_v4.add(norm)
+        elif ver == 6:
+            http_v6.add(norm)
+
+    # Write IPSet XMLs
+    write_firewalld_ipset_xml("efa_admins", "EFA-NG Admins (Full Access)", admin_v4, family="inet")
+    if admin_v6:
+        write_firewalld_ipset_xml("efa_admins6", "EFA-NG Admins IPv6 (Full Access)", admin_v6, family="inet6")
+    
+    if trusted_v4:
+        write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services (MariaDB, Zabbix)", trusted_v4, family="inet")
+    else:
+        # Dummy localhost if empty to prevent firewalld error
+        write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services", ["127.0.0.1"], family="inet")
+
+    if http_v4:
+        write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", http_v4, family="inet")
+    else:
+        write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", ["127.0.0.1"], family="inet")
+
+    # Generate public.xml
+    pub_lines = ['<?xml version="1.0" encoding="utf-8"?>']
+    pub_lines.append('<zone>')
+    pub_lines.append('  <short>Public</short>')
+    pub_lines.append('  <description>EFA-NG Protected Zone</description>')
+    
+    # Public services
+    pub_lines.append('  <service name="dhcpv6-client"/>')
+    for p in cfg.get("public_ports", []):
+        port_num = str(p.get("port", "")).strip()
+        proto = p.get("proto", "tcp").lower()
+        if port_num:
+            if port_num == "25" and proto == "tcp":
+                pub_lines.append('  <service name="smtp"/>')
+            else:
+                pub_lines.append(f'  <port port="{port_num}" protocol="{proto}"/>')
+
+    # Rich rules: Admins (Full Access)
+    pub_lines.append('  <rule family="ipv4">')
+    pub_lines.append('    <source ipset="efa_admins"/>')
+    pub_lines.append('    <accept/>')
+    pub_lines.append('  </rule>')
+
+    if admin_v6:
+        pub_lines.append('  <rule family="ipv6">')
+        pub_lines.append('    <source ipset="efa_admins6"/>')
+        pub_lines.append('    <accept/>')
+        pub_lines.append('  </rule>')
+
+    # Rich rules: Trusted Ports
+    trusted_ports = cfg.get("trusted", {}).get("ports", [{"port": "3306", "proto": "tcp"}, {"port": "10050", "proto": "tcp"}])
+    for tp in trusted_ports:
+        port_num = str(tp.get("port", "")).strip()
+        proto = tp.get("proto", "tcp").lower()
+        if port_num:
+            pub_lines.append('  <rule family="ipv4">')
+            pub_lines.append('    <source ipset="efa_trusted"/>')
+            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
+            pub_lines.append('    <accept/>')
+            pub_lines.append('  </rule>')
+
+    # Rich rules: HTTP / HTTPS Ports
+    http_ports = cfg.get("http_only", {}).get("ports", [{"port": "80", "proto": "tcp"}, {"port": "443", "proto": "tcp"}])
+    for hp in http_ports:
+        port_num = str(hp.get("port", "")).strip()
+        proto = hp.get("proto", "tcp").lower()
+        if port_num:
+            pub_lines.append('  <rule family="ipv4">')
+            pub_lines.append('    <source ipset="efa_http"/>')
+            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
+            pub_lines.append('    <accept/>')
+            pub_lines.append('  </rule>')
+
+    pub_lines.append('  <forward/>')
+    pub_lines.append('</zone>\n')
+
+    with open("/etc/firewalld/zones/public.xml", "w", encoding="utf-8") as f:
+        f.write("\n".join(pub_lines))
+    os.chmod("/etc/firewalld/zones/public.xml", 0o644)
+
+    # Ensure trusted.xml is clean with target ACCEPT
+    trusted_xml = """<?xml version="1.0" encoding="utf-8"?>
+<zone>
+  <short>Trusted</short>
+  <description>All network connections are accepted.</description>
+  <target>ACCEPT</target>
+</zone>
+"""
+    with open("/etc/firewalld/zones/trusted.xml", "w", encoding="utf-8") as f:
+        f.write(trusted_xml)
+    os.chmod("/etc/firewalld/zones/trusted.xml", 0o644)
+
+    # Reload firewalld
+    res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
+    if res.returncode == 0:
+        print(f"{C_GREEN}[eFa-Firewall]{C_RESET} Firewall rules applied and reloaded successfully.")
+        return True
+    else:
+        print(f"{C_RED}[ERROR]{C_RESET} Firewall reload returned error:\n{res.stderr}")
+        return False
+
+def show_status(cfg):
+    is_fw_active = False
+    try:
+        res = subprocess.run(["firewall-cmd", "--state"], capture_output=True, text=True)
+        if "running" in res.stdout:
+            is_fw_active = True
+    except Exception:
+        pass
+
+    enabled = cfg.get("enabled", True)
+    
+    print("\n" + f"{C_CYAN}┌────────────────────────────────────────────────────────────────────────┐{C_RESET}")
+    print(f"{C_CYAN}│{C_RESET}                      {C_BOLD}EFA-NG FIREWALL STATUS{C_RESET}                            {C_CYAN}│{C_RESET}")
+    print(f"{C_CYAN}├────────────────────────────────────────────────────────────────────────┤{C_RESET}")
+    
+    fw_status_str = f"{C_GREEN}● ACTIVE / RUNNING{C_RESET}" if is_fw_active else f"{C_RED}○ INACTIVE{C_RESET}"
+    mode_status_str = f"{C_GREEN}● PROTECTED (RESTRICTED ACCESS){C_RESET}" if enabled else f"{C_YELLOW}○ UNRESTRICTED (OPEN){C_RESET}"
+    
+    print(f" {C_CYAN}│{C_RESET}  Firewall Service : {fw_status_str:<45} {C_CYAN}│{C_RESET}")
+    print(f" {C_CYAN}│{C_RESET}  Protection Mode  : {mode_status_str:<45} {C_CYAN}│{C_RESET}")
+    print(f"{C_CYAN}├────────────────────────────────────────────────────────────────────────┤{C_RESET}")
+    
+    num_admins = len(cfg.get("admins", []))
+    num_trusted = len(cfg.get("trusted", {}).get("entries", []))
+    num_http = len(cfg.get("http_only", {}).get("entries", []))
+    num_pub = len(cfg.get("public_ports", []))
+
+    print(f" {C_CYAN}│{C_RESET}  Admins (All Ports Open)     : {C_WHITE}{num_admins:>3}{C_RESET} entries                                  {C_CYAN}│{C_RESET}")
+    print(f" {C_CYAN}│{C_RESET}  Trusted (DB & Monitoring)   : {C_WHITE}{num_trusted:>3}{C_RESET} entries (Ports: 3306, 10050)             {C_CYAN}│{C_RESET}")
+    print(f" {C_CYAN}│{C_RESET}  HTTP/HTTPS Only             : {C_WHITE}{num_http:>3}{C_RESET} entries (Ports: 80, 443)                 {C_CYAN}│{C_RESET}")
+    print(f" {C_CYAN}│{C_RESET}  Public Ports (World Open)   : {C_WHITE}{num_pub:>3}{C_RESET} entries (Port: 25 SMTP)                 {C_CYAN}│{C_RESET}")
+    print(f"{C_CYAN}└────────────────────────────────────────────────────────────────────────┘{C_RESET}\n")
+
+def list_rules(cfg):
+    show_status(cfg)
+    
+    print(f"{C_BOLD}{C_GREEN}=== 1. ADMINS (Full Access to All Ports) ==={C_RESET}")
+    admins = cfg.get("admins", [])
+    if not admins:
+        print("  (None configured)")
+    else:
+        for idx, item in enumerate(admins, 1):
+            ip = item.get("ip", "")
+            comment = item.get("comment", "")
+            print(f"  {C_CYAN}{idx:2d}){C_RESET} {C_BOLD}{ip:<22}{C_RESET} # {comment}")
+
+    print(f"\n{C_BOLD}{C_GREEN}=== 2. TRUSTED SERVICES (MariaDB 3306, Zabbix 10050) ==={C_RESET}")
+    trusted_entries = cfg.get("trusted", {}).get("entries", [])
+    if not trusted_entries:
+        print("  (None configured)")
+    else:
+        for idx, item in enumerate(trusted_entries, 1):
+            ip = item.get("ip", "")
+            comment = item.get("comment", "")
+            print(f"  {C_CYAN}{idx:2d}){C_RESET} {C_BOLD}{ip:<22}{C_RESET} # {comment}")
+
+    print(f"\n{C_BOLD}{C_GREEN}=== 3. HTTP / HTTPS ONLY (Ports 80, 443) ==={C_RESET}")
+    http_entries = cfg.get("http_only", {}).get("entries", [])
+    if not http_entries:
+        print("  (None configured)")
+    else:
+        for idx, item in enumerate(http_entries, 1):
+            ip = item.get("ip", "")
+            comment = item.get("comment", "")
+            print(f"  {C_CYAN}{idx:2d}){C_RESET} {C_BOLD}{ip:<22}{C_RESET} # {comment}")
+
+    print(f"\n{C_BOLD}{C_GREEN}=== 4. PUBLIC PORTS (Open to 0.0.0.0/0) ==={C_RESET}")
+    pub_ports = cfg.get("public_ports", [])
+    if not pub_ports:
+        print("  (None open)")
+    else:
+        for idx, item in enumerate(pub_ports, 1):
+            p = item.get("port", "")
+            proto = item.get("proto", "tcp")
+            comment = item.get("comment", "")
+            print(f"  {C_CYAN}{idx:2d}){C_RESET} Port {C_BOLD}{p}/{proto:<5}{C_RESET} # {comment}")
+    print("")
+
+def cli_add_entry(cfg, group, ip, comment=""):
+    norm, ver = normalize_ip(ip)
+    if not norm:
+        print(f"{C_RED}[ERROR]{C_RESET} Invalid IP address or CIDR network: '{ip}'")
+        return False
+
+    group = group.lower()
+    if group in ["admin", "admins"]:
+        entries = cfg.setdefault("admins", [])
+    elif group in ["trusted"]:
+        entries = cfg.setdefault("trusted", {}).setdefault("entries", [])
+    elif group in ["http", "http_only", "http-only", "web"]:
+        entries = cfg.setdefault("http_only", {}).setdefault("entries", [])
+    else:
+        print(f"{C_RED}[ERROR]{C_RESET} Unknown group '{group}'. Valid groups: admins, trusted, http_only")
+        return False
+
+    # Check if already exists
+    for item in entries:
+        if item.get("ip") == norm:
+            item["comment"] = comment or item.get("comment", "")
+            print(f"{C_YELLOW}[eFa-Firewall]{C_RESET} Updated existing entry {norm} in {group}: {item['comment']}")
+            save_config(cfg)
+            apply_firewall(cfg)
+            return True
+
+    entries.append({"ip": norm, "comment": comment})
+    save_config(cfg)
+    print(f"{C_GREEN}[eFa-Firewall]{C_RESET} Added {norm} to {group} with comment: '{comment}'")
+    apply_firewall(cfg)
+    return True
+
+def cli_del_entry(cfg, group, ip):
+    norm, ver = normalize_ip(ip)
+    target = norm if norm else ip.strip()
+
+    group = group.lower()
+    if group in ["admin", "admins"]:
+        entries = cfg.get("admins", [])
+    elif group in ["trusted"]:
+        entries = cfg.get("trusted", {}).get("entries", [])
+    elif group in ["http", "http_only", "http-only", "web"]:
+        entries = cfg.get("http_only", {}).get("entries", [])
+    else:
+        print(f"{C_RED}[ERROR]{C_RESET} Unknown group '{group}'. Valid groups: admins, trusted, http_only")
+        return False
+
+    found = False
+    for i, item in enumerate(entries):
+        if item.get("ip") == target:
+            del entries[i]
+            found = True
+            break
+
+    if found:
+        save_config(cfg)
+        print(f"{C_GREEN}[eFa-Firewall]{C_RESET} Deleted {target} from {group}.")
+        apply_firewall(cfg)
+        return True
+    else:
+        print(f"{C_RED}[ERROR]{C_RESET} Entry {target} not found in {group}.")
+        return False
+
+# ----------------- Interactive TUI Submenu -----------------
+def manage_group_tui(cfg, group_name, title, desc):
+    while True:
+        os.system("clear")
+        print(f"{C_CYAN}┌────────────────────────────────────────────────────────────────────────┐{C_RESET}")
+        print(f"{C_CYAN}│{C_RESET}  {C_BOLD}{title.center(68)}{C_RESET}  {C_CYAN}│{C_RESET}")
+        print(f"{C_CYAN}│{C_RESET}  {C_DIM}{desc.center(68)}{C_RESET}  {C_CYAN}│{C_RESET}")
+        print(f"{C_CYAN}├────────────────────────────────────────────────────────────────────────┤{C_RESET}")
+
+        if group_name == "admins":
+            entries = cfg.setdefault("admins", [])
+        elif group_name == "trusted":
+            entries = cfg.setdefault("trusted", {}).setdefault("entries", [])
+        elif group_name == "http_only":
+            entries = cfg.setdefault("http_only", {}).setdefault("entries", [])
+        elif group_name == "public_ports":
+            entries = cfg.setdefault("public_ports", [])
+
+        if not entries:
+            print(f" {C_CYAN}│{C_RESET}  {C_YELLOW}(No entries configured){C_RESET}{' ':46}{C_CYAN}│{C_RESET}")
+        else:
+            for idx, item in enumerate(entries, 1):
+                if group_name == "public_ports":
+                    line = f"{idx:2d}) Port {item.get('port')}/{item.get('proto', 'tcp')} - {item.get('comment', '')}"
+                else:
+                    line = f"{idx:2d}) {item.get('ip', ''):<20}  # {item.get('comment', '')}"
+                if len(line) > 68:
+                    line = line[:65] + "..."
+                print(f" {C_CYAN}│{C_RESET}  {line:<68}  {C_CYAN}│{C_RESET}")
+
+        print(f"{C_CYAN}└────────────────────────────────────────────────────────────────────────┘{C_RESET}")
+        print("")
+        print(f"  {C_BOLD}a){C_RESET} Add new entry")
+        print(f"  {C_BOLD}e){C_RESET} Edit comment of an entry")
+        print(f"  {C_BOLD}d){C_RESET} Delete an entry")
+        print(f"  {C_BOLD}b){C_RESET} Back to Firewall Main Menu")
+        print("")
+        choice = input(f" {C_GREEN}[eFa-NG]{C_RESET} Choose action [a/e/d/b]: ").strip().lower()
+
+        if choice in ["b", "q", "exit", ""]:
+            break
+        elif choice == "a":
+            if group_name == "public_ports":
+                port = input(" Enter port number (e.g. 25, 587): ").strip()
+                if not port.isdigit():
+                    print(f"{C_RED}Invalid port number.{C_RESET}")
+                    input("Press Enter to continue...")
+                    continue
+                proto = input(" Enter protocol [tcp/udp] (default: tcp): ").strip().lower() or "tcp"
+                comm = input(" Enter comment / description: ").strip()
+                entries.append({"port": port, "proto": proto, "comment": comm})
+                save_config(cfg)
+                apply_firewall(cfg)
+                input(f"{C_GREEN}Entry added and applied. Press Enter...{C_RESET}")
+            else:
+                ip_in = input(" Enter IP address or CIDR (e.g. 192.168.1.100 or 10.0.0.0/24): ").strip()
+                norm, ver = normalize_ip(ip_in)
+                if not norm:
+                    print(f"{C_RED}Invalid IP / CIDR format.{C_RESET}")
+                    input("Press Enter to continue...")
+                    continue
+                comm = input(" Enter comment / description: ").strip()
+                entries.append({"ip": norm, "comment": comm})
+                save_config(cfg)
+                apply_firewall(cfg)
+                input(f"{C_GREEN}Entry added and applied. Press Enter...{C_RESET}")
+        elif choice == "e":
+            idx_in = input(f" Enter entry number to edit [1-{len(entries)}]: ").strip()
+            if idx_in.isdigit() and 1 <= int(idx_in) <= len(entries):
+                target_item = entries[int(idx_in)-1]
+                old_comm = target_item.get("comment", "")
+                print(f" Current comment: {old_comm}")
+                new_comm = input(" Enter new comment: ").strip()
+                if new_comm:
+                    target_item["comment"] = new_comm
+                    save_config(cfg)
+                    input(f"{C_GREEN}Comment updated. Press Enter...{C_RESET}")
+            else:
+                print(f"{C_RED}Invalid entry number.{C_RESET}")
+                input("Press Enter to continue...")
+        elif choice == "d":
+            idx_in = input(f" Enter entry number to delete [1-{len(entries)}]: ").strip()
+            if idx_in.isdigit() and 1 <= int(idx_in) <= len(entries):
+                del_item = entries.pop(int(idx_in)-1)
+                save_config(cfg)
+                apply_firewall(cfg)
+                input(f"{C_GREEN}Deleted entry and applied changes. Press Enter...{C_RESET}")
+            else:
+                print(f"{C_RED}Invalid entry number.{C_RESET}")
+                input("Press Enter to continue...")
+
+def interactive_tui():
+    cfg = load_config()
+    while True:
+        os.system("clear")
+        show_status(cfg)
+        print(f" {C_BOLD}┌─ ACCESS GROUPS ────────────────────────────────────────────────────────┐{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  1) Admins Group (Full access to all ports & protocols)                {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  2) Trusted Services (MariaDB 3306, Zabbix 10050)                     {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  3) HTTP & HTTPS Web Access (Ports 80, 443)                             {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  4) Public Ports (Open to the World: Port 25 SMTP)                     {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}└────────────────────────────────────────────────────────────────────────┘{C_RESET}")
+        print(f" {C_BOLD}┌─ ACTIONS & TOOLS ──────────────────────────────────────────────────────┐{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  5) View All Rules & Comments Table                                    {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}│{C_RESET}  6) Apply Firewall Rules Now (Reload firewalld)                         {C_BOLD}│{C_RESET}")
+        mode_toggle_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted Mode)"
+        print(f" {C_BOLD}│{C_RESET}  7) {mode_toggle_label:<67} {C_BOLD}│{C_RESET}")
+        print(f" {C_BOLD}└────────────────────────────────────────────────────────────────────────┘{C_RESET}")
+        print("")
+        print(f"   {C_BOLD}0){C_RESET} Return to Configuration Console (Exit)")
+        print("")
+        choice = input(f" {C_GREEN}[eFa-NG]{C_RESET} : ").strip()
+
+        if choice in ["0", "q", "exit"]:
+            break
+        elif choice == "1":
+            manage_group_tui(cfg, "admins", "ADMINS LIST (FULL ACCESS)", "Access to ALL TCP/UDP ports and protocols")
+        elif choice == "2":
+            manage_group_tui(cfg, "trusted", "TRUSTED SERVICES", "Access to MariaDB (3306) and Zabbix-Agent (10050)")
+        elif choice == "3":
+            manage_group_tui(cfg, "http_only", "HTTP / HTTPS ACCESS", "Access to Web Management Interface (Ports 80 & 443)")
+        elif choice == "4":
+            manage_group_tui(cfg, "public_ports", "PUBLIC PORTS (WORLD OPEN)", "Ports open to entire world (0.0.0.0/0)")
+        elif choice == "5":
+            os.system("clear")
+            list_rules(cfg)
+            input("Press [Enter] to return...")
+        elif choice == "6":
+            apply_firewall(cfg)
+            input("Press [Enter] to return...")
+        elif choice == "7":
+            cfg["enabled"] = not cfg.get("enabled", True)
+            save_config(cfg)
+            apply_firewall(cfg)
+            input(f"{C_GREEN}Protection mode toggled. Press [Enter] to continue...{C_RESET}")
+
+def main():
+    if os.geteuid() != 0:
+        print(f"{C_RED}[ERROR]{C_RESET} eFa-Firewall must be run as root.")
+        sys.exit(1)
+
+    parser = argparse.ArgumentParser(description="EFA-NG Firewall & Access Control Manager")
+    parser.add_argument("--apply", action="store_true", help="Generate and apply firewall rules from config")
+    parser.add_argument("--status", action="store_true", help="Show current firewall status")
+    parser.add_argument("--list", action="store_true", help="List all firewall rules, IPs and comments")
+    parser.add_argument("--enable", action="store_true", help="Enable firewall restriction mode")
+    parser.add_argument("--disable", action="store_true", help="Disable firewall restriction mode (open mode)")
+    parser.add_argument("--add", nargs=3, metavar=("GROUP", "IP", "COMMENT"), help="Add IP to group (admins, trusted, http_only)")
+    parser.add_argument("--del", dest="delete", nargs=2, metavar=("GROUP", "IP"), help="Delete IP from group")
+    parser.add_argument("--tui", action="store_true", help="Run interactive TUI console")
+
+    args = parser.parse_args()
+    cfg = load_config()
+
+    if args.apply:
+        success = apply_firewall(cfg)
+        sys.exit(0 if success else 1)
+    elif args.status:
+        show_status(cfg)
+        sys.exit(0)
+    elif args.list:
+        list_rules(cfg)
+        sys.exit(0)
+    elif args.enable:
+        cfg["enabled"] = True
+        save_config(cfg)
+        apply_firewall(cfg)
+        sys.exit(0)
+    elif args.disable:
+        cfg["enabled"] = False
+        save_config(cfg)
+        apply_firewall(cfg)
+        sys.exit(0)
+    elif args.add:
+        group, ip, comment = args.add
+        success = cli_add_entry(cfg, group, ip, comment)
+        sys.exit(0 if success else 1)
+    elif args.delete:
+        group, ip = args.delete
+        success = cli_del_entry(cfg, group, ip)
+        sys.exit(0 if success else 1)
+    else:
+        # Default action: run interactive TUI
+        interactive_tui()
+
+if __name__ == "__main__":
+    main()

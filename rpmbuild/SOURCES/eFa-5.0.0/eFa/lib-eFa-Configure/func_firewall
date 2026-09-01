@@ -1,0 +1,15 @@
+# +---------------------------------------------------+
+# Configure Firewall & Access Control
+# +---------------------------------------------------+
+
+function func_firewall() {
+    if [ -x /usr/sbin/eFa-Firewall ]; then
+        /usr/sbin/eFa-Firewall
+    elif [ -x /var/eFa/lib/eFa-Configure/eFa-Firewall ]; then
+        /var/eFa/lib/eFa-Configure/eFa-Firewall
+    else
+        func_echo-header
+        echo -e "$red[ERROR]$clean /usr/sbin/eFa-Firewall not found."
+        pause
+    fi
+}

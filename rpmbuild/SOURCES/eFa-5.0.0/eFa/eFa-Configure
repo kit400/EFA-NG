@@ -56,6 +56,7 @@ shopt -s extglob
 . /var/eFa/lib/eFa-Configure/func_backup
 . /var/eFa/lib/eFa-Configure/func_asksigrules
 . /var/eFa/lib/eFa-Configure/func_trustednetworks
+. /var/eFa/lib/eFa-Configure/func_firewall
 
 # Configuration & UI mode
 CONFIG_FILE="/etc/eFa/eFa-Configure.conf"
@@ -285,6 +286,7 @@ func_dispatch_choice() {
     17) func_webmin ;;
     18) func_fail2ban ;;
     19) func_backup-settings ;;
+    20) func_firewall ;;
     M|m) func_switch_ui_mode ;;
     T|t) UI_MODE="tui"; func_tui_menu ;;
     R|r) return 0 ;;
@@ -356,7 +358,8 @@ show_modern_menu() {
   local b_bk="${green}● ON ${clean}"
   [[ -f /etc/eFa/eFa-Backup.disabled ]] && b_bk="${yellow}○ OFF${clean}"
 
-  local b_upd=$b_ok
+  local b_fw=$b_off
+  [[ $(systemctl is-active firewalld 2>/dev/null) == "active" ]] && b_fw=$b_ok
 
   clear
   echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
@@ -370,8 +373,8 @@ show_modern_menu() {
   echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
   echo -e " ${cyan}│${clean}   ${bold}SERVICES:${clean}                                                            ${cyan}│${clean}"
   echo -e " ${cyan}│${clean}   Postfix: [$b_postfix]       MailScanner: [$b_ms]       MariaDB: [$b_maria]   ${cyan}│${clean}"
-  echo -e " ${cyan}│${clean}   Apache : [$b_httpd]       Fail2Ban   : [$b_f2b]       PHP-FPM: [$b_phpfpm]   ${cyan}│${clean}"
-  echo -e " ${cyan}│${clean}   Backup : [$b_bk]       Maintenance: [$b_maint]       Updates: [$b_upd]   ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}   Apache : [$b_httpd]       Fail2Ban   : [$b_f2b]       Firewall: [$b_fw]   ${cyan}│${clean}"
+  echo -e " ${cyan}│${clean}   Backup : [$b_bk]       Maintenance: [$b_maint]       PHP-FPM: [$b_phpfpm]   ${cyan}│${clean}"
   echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
   echo ""
   echo -e " ${bold}┌─ SYSTEM & NETWORK ───────────────┐  ┌─ MAIL & FILTERING ───────────────┐${clean}"
@@ -386,7 +389,7 @@ show_modern_menu() {
   echo -e " ${bold}│${clean} 15) Let's Encrypt SSL Certs      ${bold}│  │${clean} 12) Backup & Server Migration   ${bold}│${clean}"
   echo -e " ${bold}│${clean} 17) Webmin Control Panel         ${bold}│  │${clean} 13) Update System & Packages     ${bold}│${clean}"
   echo -e " ${bold}│${clean} 18) Fail2Ban Protection          ${bold}│  │${clean} 14) Maintenance Mode (Toggle)    ${bold}│${clean}"
-  echo -e " ${bold}│${clean}                                  ${bold}│  │${clean} 19) Auto-Backup Settings         ${bold}│${clean}"
+  echo -e " ${bold}│${clean} 20) Firewall & Access Control    ${bold}│  │${clean} 19) Auto-Backup Settings         ${bold}│${clean}"
   echo -e " ${bold}└──────────────────────────────────┘  └──────────────────────────────────┘${clean}"
   echo ""
   echo -e "   ${bold}0)${clean} Logout (SSH)      ${bold}M)${clean} Switch UI Mode (Classic/TUI)      ${bold}R)${clean} Refresh"
@@ -415,6 +418,7 @@ show_classic_menu() {
   echo -e "7) Mail Settings                      17) Webmin"
   echo -e "8) Spam Settings                      18) Fail2Ban"
   echo -e "9) MariaDB Recovery                   19) Auto-Backup settings"
+  echo -e "                                      20) Firewall & Access Control"
   echo -e ""
   echo -e "M) Switch to Modern Mode              T) Open TUI Dialog"
   echo -e ""
@@ -436,7 +440,7 @@ func_tui_menu() {
   while true; do
     CHOICE=$(whiptail --title "EFA-NG Configuration Console" \
       --backtitle "EFA-NG Project (https://efa-ng.space.ua | Support: https://t.me/EFA_NG)" \
-      --menu "Select an option using arrow keys and press Enter:" 24 76 16 \
+      --menu "Select an option using arrow keys and press Enter:" 24 76 17 \
       "1"  "Shell (Exit to Bash)" \
       "2"  "Reboot System" \
       "3"  "Halt System" \
@@ -456,6 +460,7 @@ func_tui_menu() {
       "17" "Webmin Control Panel" \
       "18" "Fail2Ban Protection" \
       "19" "Auto-Backup Settings" \
+      "20" "Firewall & Access Control" \
       "M"  "Switch UI Mode (Classic / Modern / TUI)" \
       "0"  "Logout from SSH" \
       3>&1 1>&2 2>&3)

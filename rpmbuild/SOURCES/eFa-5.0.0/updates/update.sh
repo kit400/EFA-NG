@@ -248,6 +248,12 @@ execcmd
 cmd='systemctl start clamav-freshclam'
 execcmd
 
+# Apply firewall rules if eFa-Firewall is available
+if [[ -x /usr/sbin/eFa-Firewall ]]; then
+    cmd='/usr/sbin/eFa-Firewall --apply'
+    execcmd
+fi
+
 # Disable maintenance mode if disabled during script
 if [[ $MAINT -eq 1 ]]; then
     echo "* * * * * root /usr/sbin/eFa-Monitor-cron >/dev/null 2>&1" > /etc/cron.d/eFa-Monitor.cron

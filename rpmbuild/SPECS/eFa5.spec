@@ -17,7 +17,7 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 9
+%define releasenum 10
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
@@ -428,6 +428,9 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/eFa-Configure
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 mv eFa/lib-eFa-Configure/* $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/eFa-Configure
 mv eFa/eFa-Configure $RPM_BUILD_ROOT%{_sbindir}
+[ -f eFa/eFa-Firewall ] && mv eFa/eFa-Firewall $RPM_BUILD_ROOT%{_sbindir}
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/eFa
+[ -f eFa/firewall.conf.default ] && mv eFa/firewall.conf.default $RPM_BUILD_ROOT%{_sysconfdir}/eFa/firewall.conf.default
 
 # Move modules into position
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/eFa/lib/selinux
@@ -507,6 +510,17 @@ if [ "$1" = "1" ]; then
 
         echo "%{version}" > %{_sysconfdir}/eFa-Version
         echo "eFa-%{version}" > %{_sysconfdir}/EFA-Version
+
+        if [ ! -f %{_sysconfdir}/eFa/firewall.conf ]; then
+            if [ -f %{_sysconfdir}/eFa/firewall.conf.default ]; then
+                cp %{_sysconfdir}/eFa/firewall.conf.default %{_sysconfdir}/eFa/firewall.conf
+                chmod 0640 %{_sysconfdir}/eFa/firewall.conf
+            fi
+        fi
+        if [ -x %{_sbindir}/eFa-Firewall ]; then
+            %{_sbindir}/eFa-Firewall --apply >/dev/null 2>&1 || true
+        fi
+
         echo "Build completed!"
     fi
 fi
@@ -525,6 +539,16 @@ if [[ "$1" == "2" || "$flag" == "1" ]]; then
     echo "%{version}" > %{_sysconfdir}/eFa-Version
     echo "eFa-%{version}" > %{_sysconfdir}/EFA-Version
 
+    if [ ! -f %{_sysconfdir}/eFa/firewall.conf ]; then
+        if [ -f %{_sysconfdir}/eFa/firewall.conf.default ]; then
+            cp %{_sysconfdir}/eFa/firewall.conf.default %{_sysconfdir}/eFa/firewall.conf
+            chmod 0640 %{_sysconfdir}/eFa/firewall.conf
+        fi
+    fi
+    if [ -x %{_sbindir}/eFa-Firewall ]; then
+        %{_sbindir}/eFa-Firewall --apply >/dev/null 2>&1 || true
+    fi
+
     echo "Update completed successfully!"
 fi
 
@@ -536,6 +560,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_usrsrc}/eFa
 %{_localstatedir}/eFa/lib/eFa-Configure
 %attr(0755, root, root) %{_sbindir}/eFa-Configure
+%attr(0755, root, root) %{_sbindir}/eFa-Firewall
+%config(noreplace) %attr(0640, root, root) %{_sysconfdir}/eFa/firewall.conf.default
 %attr(0755, root, root) %{_sbindir}/eFa-Monitor-cron
 %config(noreplace) %{_sysconfdir}/sysconfig/eFa-Monitor
 %attr(0755, root, root) %{_sbindir}/eFa-Backup
@@ -558,6 +584,13 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
+* Tue Sep 01 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.6-10
+- Add eFa-Firewall management script for CentOS Stream 10
+- Support Admin, Trusted (MariaDB, Zabbix), and HTTP-only access groups
+- Support per-IP / CIDR human-readable comments and labels
+- Full integration into eFa-Configure (Modern, Classic, and TUI modes)
+- Auto-apply rules during system updates while preserving local configuration
+
 * Wed Aug 26 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.3-1
 - Interactive customizable dashboard engine (11 widgets, drag-and-drop, dynamic sizing, auto-refresh)
 - GeoIP replacement with strato-do/ip-geo and AS/ASN tracking

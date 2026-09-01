@@ -17,3 +17,9 @@
 *.env
 .env*
 .efa-telegram.env
+__pycache__/
+*.py[cod]
+firewall.conf
+*.firewall.conf
+/rpmbuild/SOURCES/eFa-5.0.0/eFa/firewall.conf
+!/rpmbuild/SOURCES/eFa-5.0.0/eFa/firewall.conf.default

@@ -1,0 +1,74 @@
+{
+  "version": "1.0",
+  "enabled": true,
+  "allow_ping": true,
+  "public_ports": [
+    {
+      "port": "25",
+      "proto": "tcp",
+      "comment": "SMTP Mail Server (Public)"
+    }
+  ],
+  "admins": [
+    {
+      "ip": "127.0.0.1",
+      "comment": "Localhost loopback"
+    },
+    {
+      "ip": "10.0.0.0/8",
+      "comment": "Example Internal Admin Subnet"
+    },
+    {
+      "ip": "192.168.1.0/24",
+      "comment": "Example Office Network"
+    }
+  ],
+  "trusted": {
+    "ports": [
+      {
+        "port": "3306",
+        "proto": "tcp",
+        "comment": "MariaDB Database"
+      },
+      {
+        "port": "10050",
+        "proto": "tcp",
+        "comment": "Zabbix Agent"
+      }
+    ],
+    "entries": [
+      {
+        "ip": "10.0.0.0/8",
+        "comment": "Example Monitoring and DB Clients"
+      },
+      {
+        "ip": "192.168.1.0/24",
+        "comment": "Example Trusted LAN"
+      }
+    ]
+  },
+  "http_only": {
+    "ports": [
+      {
+        "port": "80",
+        "proto": "tcp",
+        "comment": "HTTP Web Interface"
+      },
+      {
+        "port": "443",
+        "proto": "tcp",
+        "comment": "HTTPS Secure Web Interface"
+      }
+    ],
+    "entries": [
+      {
+        "ip": "10.0.0.0/8",
+        "comment": "Example Web Management Subnet"
+      },
+      {
+        "ip": "192.168.1.0/24",
+        "comment": "Example Corporate Web Users"
+      }
+    ]
+  }
+}
