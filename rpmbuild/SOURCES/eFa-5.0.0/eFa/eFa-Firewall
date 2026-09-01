@@ -456,7 +456,7 @@ def list_rules(cfg):
     # 1. Admins Table
     t_admin = Table(title="● ADMINS ACCESS LIST (Full Access to All Ports & Protocols)", box=box.ROUNDED, header_style="bold magenta", border_style="magenta", expand=True)
     t_admin.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_admin.add_column("IP / CIDR Network", style="bold white", width=26)
+    t_admin.add_column("IP / CIDR Network", style="bold white", width=22)
     t_admin.add_column("Allowed Ports", style="bold green", width=24)
     t_admin.add_column("Description / Label", style="italic yellow")
     
@@ -471,7 +471,7 @@ def list_rules(cfg):
     # 2. Trusted Table
     t_trust = Table(title="● TRUSTED SERVICES (MariaDB 3306, Zabbix 10050)", box=box.ROUNDED, header_style="bold blue", border_style="blue", expand=True)
     t_trust.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_trust.add_column("IP / CIDR Network", style="bold white", width=26)
+    t_trust.add_column("IP / CIDR Network", style="bold white", width=22)
     t_trust.add_column("Allowed Ports", style="bold green", width=24)
     t_trust.add_column("Description / Label", style="italic yellow")
     
@@ -486,7 +486,7 @@ def list_rules(cfg):
     # 3. HTTP Only Table
     t_http = Table(title="● HTTP / HTTPS WEB ACCESS (Ports 80, 443)", box=box.ROUNDED, header_style="bold green", border_style="green", expand=True)
     t_http.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_http.add_column("IP / CIDR Network", style="bold white", width=26)
+    t_http.add_column("IP / CIDR Network", style="bold white", width=22)
     t_http.add_column("Allowed Ports", style="bold green", width=24)
     t_http.add_column("Description / Label", style="italic yellow")
     
@@ -501,7 +501,7 @@ def list_rules(cfg):
     # 4. Mail Clients Table
     t_mail = Table(title="● MAIL CLIENTS & SUBMISSION (Ports 110, 143, 587, 993, 995)", box=box.ROUNDED, header_style="bold dark_cyan", border_style="dark_cyan", expand=True)
     t_mail.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_mail.add_column("IP / CIDR Network", style="bold white", width=26)
+    t_mail.add_column("IP / CIDR Network", style="bold white", width=22)
     t_mail.add_column("Allowed Ports", style="bold green", width=24)
     t_mail.add_column("Description / Label", style="italic yellow")
     
@@ -516,9 +516,9 @@ def list_rules(cfg):
     # 5. Public Ports Table
     t_pub = Table(title="● PUBLIC PORTS (Open to 0.0.0.0/0 World)", box=box.ROUNDED, header_style="bold yellow", border_style="yellow", expand=True)
     t_pub.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_pub.add_column("Port / Protocol", style="bold white", width=26)
-    t_pub.add_column("Source", style="bold green", width=24)
-    t_pub.add_column("Description / Service", style="italic yellow")
+    t_pub.add_column("IP / CIDR Network", style="bold white", width=22)
+    t_pub.add_column("Allowed Ports", style="bold green", width=24)
+    t_pub.add_column("Description / Label", style="italic yellow")
     
     pub_ports = cfg.get("public_ports", [])
     if not pub_ports:
@@ -526,7 +526,7 @@ def list_rules(cfg):
     else:
         for idx, item in enumerate(pub_ports, 1):
             p = f"{item.get('port')}/{item.get('proto', 'tcp')}"
-            t_pub.add_row(f"[ {idx:2d} ]", p, "0.0.0.0/0 (Any)", item.get("comment", ""))
+            t_pub.add_row(f"[ {idx:2d} ]", "0.0.0.0/0 (Any)", p, item.get("comment", ""))
     console.print(t_pub)
     console.print("")
 
@@ -644,10 +644,10 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
         t = Table(box=box.ROUNDED, header_style=header_style, border_style=border_style, expand=True)
         t.add_column("[ # ]", justify="center", style="bold cyan", width=7)
         if group_name == "public_ports":
-            t.add_column("Port / Protocol", style="bold white", width=22)
-            t.add_column("Scope", style="bold green", width=18)
+            t.add_column("IP / CIDR Network", style="bold white", width=26)
+            t.add_column("Allowed Ports", style="bold green", width=28)
         else:
-            t.add_column("IP / CIDR Network", style="bold white", width=24)
+            t.add_column("IP / CIDR Network", style="bold white", width=26)
             t.add_column("Family", style="bold green", width=12)
         t.add_column("Comment / Label", style="italic yellow")
 
@@ -657,7 +657,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
             for idx, item in enumerate(entries, 1):
                 if group_name == "public_ports":
                     p = f"{item.get('port')}/{item.get('proto', 'tcp')}"
-                    t.add_row(f"[ {idx:2d} ]", p, "0.0.0.0/0", item.get("comment", ""))
+                    t.add_row(f"[ {idx:2d} ]", "0.0.0.0/0 (Any)", p, item.get("comment", ""))
                 else:
                     ip_val = item.get("ip", "")
                     _, ver = normalize_ip(ip_val)
