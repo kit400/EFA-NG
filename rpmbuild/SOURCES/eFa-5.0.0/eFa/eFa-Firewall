@@ -447,6 +447,14 @@ def show_status(cfg):
 
     console.print(Panel(summary_table, title="[bold white]● System Status Overview[/]", box=box.ROUNDED, border_style="blue"))
 
+def create_rules_table(title, header_style, border_style):
+    t = Table(title=title, box=box.ROUNDED, header_style=header_style, border_style=border_style, expand=True)
+    t.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
+    t.add_column("IP / CIDR Network", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+    t.add_column("Allowed Ports", style="bold green", width=26, min_width=26, max_width=26, no_wrap=True)
+    t.add_column("Description / Label", style="italic yellow", ratio=1)
+    return t
+
 def list_rules(cfg):
     show_status(cfg)
     
@@ -454,12 +462,7 @@ def list_rules(cfg):
         return
 
     # 1. Admins Table
-    t_admin = Table(title="● ADMINS ACCESS LIST (Full Access to All Ports & Protocols)", box=box.ROUNDED, header_style="bold magenta", border_style="magenta", expand=True)
-    t_admin.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_admin.add_column("IP / CIDR Network", style="bold white", width=22)
-    t_admin.add_column("Allowed Ports", style="bold green", width=24)
-    t_admin.add_column("Description / Label", style="italic yellow")
-    
+    t_admin = create_rules_table("● ADMINS ACCESS LIST (Full Access to All Ports & Protocols)", "bold magenta", "magenta")
     admins = cfg.get("admins", [])
     if not admins:
         t_admin.add_row("[ - ]", "None configured", "-", "-")
@@ -469,12 +472,7 @@ def list_rules(cfg):
     console.print(t_admin)
 
     # 2. Trusted Table
-    t_trust = Table(title="● TRUSTED SERVICES (MariaDB 3306, Zabbix 10050)", box=box.ROUNDED, header_style="bold blue", border_style="blue", expand=True)
-    t_trust.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_trust.add_column("IP / CIDR Network", style="bold white", width=22)
-    t_trust.add_column("Allowed Ports", style="bold green", width=24)
-    t_trust.add_column("Description / Label", style="italic yellow")
-    
+    t_trust = create_rules_table("● TRUSTED SERVICES (MariaDB 3306, Zabbix 10050)", "bold blue", "blue")
     trusted_entries = cfg.get("trusted", {}).get("entries", [])
     if not trusted_entries:
         t_trust.add_row("[ - ]", "None configured", "-", "-")
@@ -484,12 +482,7 @@ def list_rules(cfg):
     console.print(t_trust)
 
     # 3. HTTP Only Table
-    t_http = Table(title="● HTTP / HTTPS WEB ACCESS (Ports 80, 443)", box=box.ROUNDED, header_style="bold green", border_style="green", expand=True)
-    t_http.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_http.add_column("IP / CIDR Network", style="bold white", width=22)
-    t_http.add_column("Allowed Ports", style="bold green", width=24)
-    t_http.add_column("Description / Label", style="italic yellow")
-    
+    t_http = create_rules_table("● HTTP / HTTPS WEB ACCESS (Ports 80, 443)", "bold green", "green")
     http_entries = cfg.get("http_only", {}).get("entries", [])
     if not http_entries:
         t_http.add_row("[ - ]", "None configured", "-", "-")
@@ -499,12 +492,7 @@ def list_rules(cfg):
     console.print(t_http)
 
     # 4. Mail Clients Table
-    t_mail = Table(title="● MAIL CLIENTS & SUBMISSION (Ports 110, 143, 587, 993, 995)", box=box.ROUNDED, header_style="bold dark_cyan", border_style="dark_cyan", expand=True)
-    t_mail.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_mail.add_column("IP / CIDR Network", style="bold white", width=22)
-    t_mail.add_column("Allowed Ports", style="bold green", width=24)
-    t_mail.add_column("Description / Label", style="italic yellow")
-    
+    t_mail = create_rules_table("● MAIL CLIENTS & SUBMISSION (Ports 110, 143, 587, 993, 995)", "bold dark_cyan", "dark_cyan")
     mail_entries = cfg.get("mail_clients", {}).get("entries", [])
     if not mail_entries:
         t_mail.add_row("[ - ]", "None configured", "-", "-")
@@ -514,12 +502,7 @@ def list_rules(cfg):
     console.print(t_mail)
 
     # 5. Public Ports Table
-    t_pub = Table(title="● PUBLIC PORTS (Open to 0.0.0.0/0 World)", box=box.ROUNDED, header_style="bold yellow", border_style="yellow", expand=True)
-    t_pub.add_column("[ # ]", justify="center", style="bold cyan", width=7)
-    t_pub.add_column("IP / CIDR Network", style="bold white", width=22)
-    t_pub.add_column("Allowed Ports", style="bold green", width=24)
-    t_pub.add_column("Description / Label", style="italic yellow")
-    
+    t_pub = create_rules_table("● PUBLIC PORTS (Open to 0.0.0.0/0 World)", "bold yellow", "yellow")
     pub_ports = cfg.get("public_ports", [])
     if not pub_ports:
         t_pub.add_row("[ - ]", "None configured", "-", "-")
@@ -642,14 +625,14 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
 
         # Entries Table
         t = Table(box=box.ROUNDED, header_style=header_style, border_style=border_style, expand=True)
-        t.add_column("[ # ]", justify="center", style="bold cyan", width=7)
+        t.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
         if group_name == "public_ports":
-            t.add_column("IP / CIDR Network", style="bold white", width=26)
-            t.add_column("Allowed Ports", style="bold green", width=28)
+            t.add_column("IP / CIDR Network", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+            t.add_column("Allowed Ports", style="bold green", width=26, min_width=26, max_width=26, no_wrap=True)
         else:
-            t.add_column("IP / CIDR Network", style="bold white", width=26)
-            t.add_column("Family", style="bold green", width=12)
-        t.add_column("Comment / Label", style="italic yellow")
+            t.add_column("IP / CIDR Network", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+            t.add_column("Family", style="bold green", width=12, min_width=12, max_width=12, no_wrap=True)
+        t.add_column("Comment / Label", style="italic yellow", ratio=1)
 
         if not entries:
             t.add_row("[ - ]", "No entries configured", "-", "-")
