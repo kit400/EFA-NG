@@ -86,6 +86,8 @@ Requires: chrony >= 4.2-1
     # chrony                                     # base    # eFa
 Requires: firewalld >= 1.1.1-3
     # firewalld                                  # base    # eFa
+Requires: python3-rich
+    # rich TUI & CLI                             # epel    # eFa-Firewall
 Requires: python3-certbot-apache >= 2.1.0-1
     #                                            # epel    # mailwatch, frontend
 Requires: rsync => 3.2.3-18
