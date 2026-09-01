@@ -18,7 +18,7 @@ import subprocess
 import ipaddress
 import argparse
 
-# Try importing rich, provide clear message if missing
+# Try importing rich, provide clear fallback if missing
 try:
     from rich.console import Console
     from rich.table import Table
@@ -85,7 +85,7 @@ def load_config():
                 return json.load(f)
         except Exception as e:
             if RICH_AVAILABLE:
-                console.print(f"[bold red][ERROR][/] Failed to parse {CONFIG_PATH}: {e}")
+                console.print(f"[bold red]ERROR:[/] Failed to parse {CONFIG_PATH}: {e}")
             else:
                 print(f"[ERROR] Failed to parse {CONFIG_PATH}: {e}")
             sys.exit(1)
@@ -144,7 +144,7 @@ def write_firewalld_ipset_xml(name, description, entries, family="inet"):
 def apply_firewall(cfg, silent=False):
     if not silent:
         if RICH_AVAILABLE:
-            console.print("[bold cyan]⚙ Generating and applying firewall configuration...[/]")
+            console.print("[bold cyan]● Generating and applying firewall configuration...[/]")
         else:
             print("[eFa-Firewall] Generating and applying firewall configuration...")
     
@@ -153,7 +153,7 @@ def apply_firewall(cfg, silent=False):
     if not enabled:
         if not silent:
             if RICH_AVAILABLE:
-                console.print("[bold yellow]⚠ Firewall protection is DISABLED in configuration. Restoring open mode...[/]")
+                console.print("[bold yellow]● Firewall protection is DISABLED in configuration. Restoring open mode...[/]")
             else:
                 print("[eFa-Firewall] Firewall protection is DISABLED. Restoring open mode...")
         os.makedirs("/etc/firewalld/zones", exist_ok=True)
@@ -187,13 +187,13 @@ def apply_firewall(cfg, silent=False):
         if res.returncode == 0:
             if not silent:
                 if RICH_AVAILABLE:
-                    console.print("[bold green]✔ Firewall successfully set to open mode.[/]")
+                    console.print("[bold green]● Firewall successfully set to open mode.[/]")
                 else:
                     print("[eFa-Firewall] Firewall successfully set to open mode.")
             return True
         else:
             if RICH_AVAILABLE:
-                console.print(f"[bold red][ERROR][/] Failed to reload firewalld: {res.stderr}")
+                console.print(f"[bold red]ERROR:[/] Failed to reload firewalld: {res.stderr}")
             else:
                 print(f"[ERROR] Failed to reload firewalld: {res.stderr}")
             return False
@@ -320,13 +320,13 @@ def apply_firewall(cfg, silent=False):
     if res.returncode == 0:
         if not silent:
             if RICH_AVAILABLE:
-                console.print("[bold green]✔ Firewall rules applied and reloaded successfully.[/]")
+                console.print("[bold green]● Firewall rules applied and reloaded successfully.[/]")
             else:
                 print("[eFa-Firewall] Firewall rules applied and reloaded successfully.")
         return True
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red][ERROR][/] Firewall reload returned error:\n{res.stderr}")
+            console.print(f"[bold red]ERROR:[/] Firewall reload returned error:\n{res.stderr}")
         else:
             print(f"[ERROR] Firewall reload returned error:\n{res.stderr}")
         return False
@@ -349,7 +349,7 @@ def show_status(cfg):
 
     # Header Panel
     header_text = Text()
-    header_text.append("EFA-NG FIREWALL & ACCESS CONTROL", style="bold cyan")
+    header_text.append("EFA-NG FIREWALL & ACCESS CONTROL MANAGER", style="bold cyan")
     header_text.append("\nCentOS Stream 10  •  NFTables / FirewallD Engine  •  https://efa-ng.space.ua", style="dim white")
     console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
 
@@ -363,17 +363,17 @@ def show_status(cfg):
     num_pub = len(cfg.get("public_ports", []))
 
     summary_table = Table(box=box.SIMPLE_HEAVY, show_header=False, expand=True)
-    summary_table.add_column("Key", style="bold cyan", width=26)
+    summary_table.add_column("Key", style="bold cyan", width=28)
     summary_table.add_column("Value", style="bold white")
 
-    summary_table.add_row("🛡️  Firewall Service", fw_badge)
-    summary_table.add_row("🔒  Protection Mode", mode_badge)
-    summary_table.add_row("👑  Admins (All Ports Open)", f"[bold white]{num_admins}[/] networks/hosts")
-    summary_table.add_row("🗄️   Trusted (DB & Zabbix)", f"[bold white]{num_trusted}[/] networks (Ports: 3306, 10050)")
-    summary_table.add_row("🌐  HTTP / HTTPS Web Access", f"[bold white]{num_http}[/] networks (Ports: 80, 443)")
-    summary_table.add_row("🌍  Public World Access", f"[bold white]{num_pub}[/] ports (Port 25 SMTP)")
+    summary_table.add_row("●  Firewall Service", fw_badge)
+    summary_table.add_row("●  Protection Mode", mode_badge)
+    summary_table.add_row("●  Admins (All Ports Open)", f"[bold white]{num_admins}[/] networks / hosts")
+    summary_table.add_row("●  Trusted (DB & Zabbix)", f"[bold white]{num_trusted}[/] networks (Ports: 3306, 10050)")
+    summary_table.add_row("●  HTTP / HTTPS Web Access", f"[bold white]{num_http}[/] networks (Ports: 80, 443)")
+    summary_table.add_row("●  Public World Access", f"[bold white]{num_pub}[/] ports (Port: 25/tcp SMTP)")
 
-    console.print(Panel(summary_table, title="[bold white]System Status Overview[/]", box=box.ROUNDED, border_style="blue"))
+    console.print(Panel(summary_table, title="[bold white]● System Status Overview[/]", box=box.ROUNDED, border_style="blue"))
 
 def list_rules(cfg):
     show_status(cfg)
@@ -382,64 +382,64 @@ def list_rules(cfg):
         return
 
     # 1. Admins Table
-    t_admin = Table(title="👑 Admin ACL (Full Access to All Ports & Protocols)", box=box.ROUNDED, header_style="bold magenta", expand=True)
-    t_admin.add_column("#", justify="right", style="cyan", width=4)
+    t_admin = Table(title="● ADMINS ACCESS LIST (Full Access to All Ports & Protocols)", box=box.ROUNDED, header_style="bold magenta", border_style="magenta", expand=True)
+    t_admin.add_column("[ # ]", justify="center", style="bold cyan", width=7)
     t_admin.add_column("IP / CIDR Network", style="bold white", width=26)
-    t_admin.add_column("Allowed Ports", style="green", width=22)
+    t_admin.add_column("Allowed Ports", style="bold green", width=24)
     t_admin.add_column("Description / Label", style="italic yellow")
     
     admins = cfg.get("admins", [])
     if not admins:
-        t_admin.add_row("-", "None configured", "-", "-")
+        t_admin.add_row("[ - ]", "None configured", "-", "-")
     else:
         for idx, item in enumerate(admins, 1):
-            t_admin.add_row(str(idx), item.get("ip", ""), "ALL (1-65535 TCP/UDP)", item.get("comment", ""))
+            t_admin.add_row(f"[ {idx:2d} ]", item.get("ip", ""), "ALL (1-65535 TCP/UDP)", item.get("comment", ""))
     console.print(t_admin)
 
     # 2. Trusted Table
-    t_trust = Table(title="🗄️  Trusted Services ACL (MariaDB 3306, Zabbix 10050)", box=box.ROUNDED, header_style="bold blue", expand=True)
-    t_trust.add_column("#", justify="right", style="cyan", width=4)
+    t_trust = Table(title="● TRUSTED SERVICES (MariaDB 3306, Zabbix 10050)", box=box.ROUNDED, header_style="bold blue", border_style="blue", expand=True)
+    t_trust.add_column("[ # ]", justify="center", style="bold cyan", width=7)
     t_trust.add_column("IP / CIDR Network", style="bold white", width=26)
-    t_trust.add_column("Allowed Ports", style="green", width=22)
+    t_trust.add_column("Allowed Ports", style="bold green", width=24)
     t_trust.add_column("Description / Label", style="italic yellow")
     
     trusted_entries = cfg.get("trusted", {}).get("entries", [])
     if not trusted_entries:
-        t_trust.add_row("-", "None configured", "-", "-")
+        t_trust.add_row("[ - ]", "None configured", "-", "-")
     else:
         for idx, item in enumerate(trusted_entries, 1):
-            t_trust.add_row(str(idx), item.get("ip", ""), "3306/tcp, 10050/tcp", item.get("comment", ""))
+            t_trust.add_row(f"[ {idx:2d} ]", item.get("ip", ""), "3306/tcp, 10050/tcp", item.get("comment", ""))
     console.print(t_trust)
 
     # 3. HTTP Only Table
-    t_http = Table(title="🌐 HTTP / HTTPS Web Management ACL (Ports 80, 443)", box=box.ROUNDED, header_style="bold green", expand=True)
-    t_http.add_column("#", justify="right", style="cyan", width=4)
+    t_http = Table(title="● HTTP / HTTPS WEB ACCESS (Ports 80, 443)", box=box.ROUNDED, header_style="bold green", border_style="green", expand=True)
+    t_http.add_column("[ # ]", justify="center", style="bold cyan", width=7)
     t_http.add_column("IP / CIDR Network", style="bold white", width=26)
-    t_http.add_column("Allowed Ports", style="green", width=22)
+    t_http.add_column("Allowed Ports", style="bold green", width=24)
     t_http.add_column("Description / Label", style="italic yellow")
     
     http_entries = cfg.get("http_only", {}).get("entries", [])
     if not http_entries:
-        t_http.add_row("-", "None configured", "-", "-")
+        t_http.add_row("[ - ]", "None configured", "-", "-")
     else:
         for idx, item in enumerate(http_entries, 1):
-            t_http.add_row(str(idx), item.get("ip", ""), "80/tcp, 443/tcp", item.get("comment", ""))
+            t_http.add_row(f"[ {idx:2d} ]", item.get("ip", ""), "80/tcp, 443/tcp", item.get("comment", ""))
     console.print(t_http)
 
     # 4. Public Ports Table
-    t_pub = Table(title="🌍 Public Ports (Open to 0.0.0.0/0 World)", box=box.ROUNDED, header_style="bold yellow", expand=True)
-    t_pub.add_column("#", justify="right", style="cyan", width=4)
+    t_pub = Table(title="● PUBLIC PORTS (Open to 0.0.0.0/0 World)", box=box.ROUNDED, header_style="bold yellow", border_style="yellow", expand=True)
+    t_pub.add_column("[ # ]", justify="center", style="bold cyan", width=7)
     t_pub.add_column("Port / Protocol", style="bold white", width=26)
-    t_pub.add_column("Source", style="green", width=22)
+    t_pub.add_column("Source", style="bold green", width=24)
     t_pub.add_column("Description / Service", style="italic yellow")
     
     pub_ports = cfg.get("public_ports", [])
     if not pub_ports:
-        t_pub.add_row("-", "None configured", "-", "-")
+        t_pub.add_row("[ - ]", "None configured", "-", "-")
     else:
         for idx, item in enumerate(pub_ports, 1):
             p = f"{item.get('port')}/{item.get('proto', 'tcp')}"
-            t_pub.add_row(str(idx), p, "0.0.0.0/0 (Any)", item.get("comment", ""))
+            t_pub.add_row(f"[ {idx:2d} ]", p, "0.0.0.0/0 (Any)", item.get("comment", ""))
     console.print(t_pub)
     console.print("")
 
@@ -447,7 +447,7 @@ def cli_add_entry(cfg, group, ip, comment=""):
     norm, ver = normalize_ip(ip)
     if not norm:
         if RICH_AVAILABLE:
-            console.print(f"[bold red][ERROR][/] Invalid IP address or CIDR network: '{ip}'")
+            console.print(f"[bold red]ERROR:[/] Invalid IP address or CIDR network: '{ip}'")
         else:
             print(f"[ERROR] Invalid IP: '{ip}'")
         return False
@@ -461,7 +461,7 @@ def cli_add_entry(cfg, group, ip, comment=""):
         entries = cfg.setdefault("http_only", {}).setdefault("entries", [])
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red][ERROR][/] Unknown group '{group}'. Valid: admins, trusted, http_only")
+            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only")
         else:
             print(f"[ERROR] Unknown group '{group}'")
         return False
@@ -471,7 +471,7 @@ def cli_add_entry(cfg, group, ip, comment=""):
         if item.get("ip") == norm:
             item["comment"] = comment or item.get("comment", "")
             if RICH_AVAILABLE:
-                console.print(f"[bold yellow]Updated existing entry {norm} in {group}: {item['comment']}[/]")
+                console.print(f"[bold yellow]● Updated existing entry {norm} in {group}: {item['comment']}[/]")
             else:
                 print(f"Updated {norm} in {group}")
             save_config(cfg)
@@ -481,7 +481,7 @@ def cli_add_entry(cfg, group, ip, comment=""):
     entries.append({"ip": norm, "comment": comment})
     save_config(cfg)
     if RICH_AVAILABLE:
-        console.print(f"[bold green]✔ Added {norm} to {group} with comment: '{comment}'[/]")
+        console.print(f"[bold green]● Added {norm} to {group} with comment: '{comment}'[/]")
     else:
         print(f"Added {norm} to {group}")
     apply_firewall(cfg)
@@ -500,7 +500,7 @@ def cli_del_entry(cfg, group, ip):
         entries = cfg.get("http_only", {}).get("entries", [])
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red][ERROR][/] Unknown group '{group}'. Valid: admins, trusted, http_only")
+            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only")
         else:
             print(f"[ERROR] Unknown group '{group}'")
         return False
@@ -515,20 +515,20 @@ def cli_del_entry(cfg, group, ip):
     if found:
         save_config(cfg)
         if RICH_AVAILABLE:
-            console.print(f"[bold green]✔ Deleted {target} from {group}.[/]")
+            console.print(f"[bold green]● Deleted {target} from {group}.[/]")
         else:
             print(f"Deleted {target} from {group}")
         apply_firewall(cfg)
         return True
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red][ERROR][/] Entry {target} not found in {group}.")
+            console.print(f"[bold red]ERROR:[/] Entry {target} not found in {group}.")
         else:
             print(f"[ERROR] Entry {target} not found in {group}")
         return False
 
 # ----------------- Interactive Rich TUI Submenu -----------------
-def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
+def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", border_style="cyan"):
     while True:
         os.system("clear")
         
@@ -536,7 +536,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
         header_text = Text()
         header_text.append(f"{title}\n", style=header_style)
         header_text.append(desc, style="dim white")
-        console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
+        console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style=border_style))
 
         if group_name == "admins":
             entries = cfg.setdefault("admins", [])
@@ -548,44 +548,44 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
             entries = cfg.setdefault("public_ports", [])
 
         # Entries Table
-        t = Table(box=box.ROUNDED, header_style=header_style, expand=True)
-        t.add_column("#", justify="right", style="cyan", width=4)
+        t = Table(box=box.ROUNDED, header_style=header_style, border_style=border_style, expand=True)
+        t.add_column("[ # ]", justify="center", style="bold cyan", width=7)
         if group_name == "public_ports":
             t.add_column("Port / Protocol", style="bold white", width=22)
-            t.add_column("Scope", style="green", width=18)
+            t.add_column("Scope", style="bold green", width=18)
         else:
             t.add_column("IP / CIDR Network", style="bold white", width=24)
-            t.add_column("Family", style="green", width=12)
+            t.add_column("Family", style="bold green", width=12)
         t.add_column("Comment / Label", style="italic yellow")
 
         if not entries:
-            t.add_row("-", "No entries configured", "-", "-")
+            t.add_row("[ - ]", "No entries configured", "-", "-")
         else:
             for idx, item in enumerate(entries, 1):
                 if group_name == "public_ports":
                     p = f"{item.get('port')}/{item.get('proto', 'tcp')}"
-                    t.add_row(str(idx), p, "0.0.0.0/0", item.get("comment", ""))
+                    t.add_row(f"[ {idx:2d} ]", p, "0.0.0.0/0", item.get("comment", ""))
                 else:
                     ip_val = item.get("ip", "")
                     _, ver = normalize_ip(ip_val)
                     ver_str = f"IPv{ver}" if ver else "IP"
-                    t.add_row(str(idx), ip_val, ver_str, item.get("comment", ""))
+                    t.add_row(f"[ {idx:2d} ]", ip_val, ver_str, item.get("comment", ""))
 
         console.print(t)
         
         # Actions Panel
         action_table = Table(box=box.SIMPLE, show_header=False, expand=True)
-        action_table.add_column("Key", style="bold yellow", width=12)
+        action_table.add_column("Key", style="bold cyan", width=10, justify="center")
         action_table.add_column("Action", style="white")
         
-        action_table.add_row("[bold cyan]a[/]", "➕ Add new IP / CIDR entry with description")
-        action_table.add_row("[bold cyan]e[/]", "✏️  Edit comment / description of an entry")
-        action_table.add_row("[bold cyan]d[/]", "🗑️  Delete an entry")
-        action_table.add_row("[bold cyan]b[/]", "↩️  Back to Main Menu")
+        action_table.add_row("[ A ]", "● Add new IP / CIDR entry with description")
+        action_table.add_row("[ E ]", "● Edit comment / description of an entry")
+        action_table.add_row("[ D ]", "● Delete an entry")
+        action_table.add_row("[ B ]", "● Back to Main Menu")
         
-        console.print(Panel(action_table, title="[bold white]Available Actions[/]", box=box.ROUNDED, border_style="dim white"))
+        console.print(Panel(action_table, title="[bold white]● Available Actions[/]", box=box.ROUNDED, border_style="dim white"))
 
-        choice = Prompt.ask("[bold green]Choose action[/]", choices=["a", "e", "d", "b", "q", ""], default="b").strip().lower()
+        choice = Prompt.ask("[bold green]Choose action [A/E/D/B][/]", choices=["a", "e", "d", "b", "q", ""], default="b").strip().lower()
 
         if choice in ["b", "q", ""]:
             break
@@ -601,7 +601,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
                 entries.append({"port": port, "proto": proto, "comment": comm})
                 save_config(cfg)
                 apply_firewall(cfg)
-                Prompt.ask("[bold green]Entry added and applied! Press Enter...[/]")
+                Prompt.ask("[bold green]● Entry added and applied! Press Enter...[/]")
             else:
                 ip_in = Prompt.ask("Enter IP address or CIDR subnet (e.g. 192.168.1.50 or 10.0.0.0/24)").strip()
                 norm, ver = normalize_ip(ip_in)
@@ -613,7 +613,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
                 entries.append({"ip": norm, "comment": comm})
                 save_config(cfg)
                 apply_firewall(cfg)
-                Prompt.ask("[bold green]Entry added and applied! Press Enter...[/]")
+                Prompt.ask("[bold green]● Entry added and applied! Press Enter...[/]")
         elif choice == "e":
             if not entries:
                 continue
@@ -626,7 +626,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
                 if new_comm:
                     target_item["comment"] = new_comm
                     save_config(cfg)
-                    Prompt.ask("[bold green]Comment updated! Press Enter...[/]")
+                    Prompt.ask("[bold green]● Comment updated! Press Enter...[/]")
             else:
                 console.print("[bold red]Invalid entry number.[/]")
                 Prompt.ask("Press Enter to continue...")
@@ -641,7 +641,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan"):
                     entries.pop(int(idx_in)-1)
                     save_config(cfg)
                     apply_firewall(cfg)
-                    Prompt.ask("[bold green]Deleted entry and reloaded firewall. Press Enter...[/]")
+                    Prompt.ask("[bold green]● Deleted entry and reloaded firewall. Press Enter...[/]")
             else:
                 console.print("[bold red]Invalid entry number.[/]")
                 Prompt.ask("Press Enter to continue...")
@@ -654,38 +654,38 @@ def interactive_tui():
 
         # Main Navigation Menu
         menu_table = Table(box=box.ROUNDED, show_header=False, expand=True, border_style="cyan")
-        menu_table.add_column("Key", style="bold cyan", width=6)
+        menu_table.add_column("Key", style="bold cyan", width=8, justify="center")
         menu_table.add_column("Category / Action", style="bold white", width=34)
         menu_table.add_column("Scope / Details", style="dim white")
 
-        menu_table.add_row("1", "👑 Manage Admins Group", "Full access to ALL ports and protocols")
-        menu_table.add_row("2", "🗄️  Manage Trusted Services", "Access to MariaDB (3306) and Zabbix-Agent (10050)")
-        menu_table.add_row("3", "🌐 Manage HTTP / HTTPS Web", "Access to Web Management Portal (Ports 80 & 443)")
-        menu_table.add_row("4", "🌍 Manage Public World Ports", "Ports open to 0.0.0.0/0 (Port 25 SMTP)")
+        menu_table.add_row("[ 1 ]", "● Manage Admins Group", "Full access to ALL ports and protocols")
+        menu_table.add_row("[ 2 ]", "● Manage Trusted Services", "Access to MariaDB (3306) and Zabbix-Agent (10050)")
+        menu_table.add_row("[ 3 ]", "● Manage HTTP / HTTPS Web", "Access to Web Management Portal (Ports 80 & 443)")
+        menu_table.add_row("[ 4 ]", "● Manage Public World Ports", "Ports open to 0.0.0.0/0 (Port 25/tcp SMTP)")
         menu_table.add_row("", "", "")
-        menu_table.add_row("5", "📋 View Full Rules Table", "Detailed listing of all active ACLs and comments")
-        menu_table.add_row("6", "⚡ Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
+        menu_table.add_row("[ 5 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
+        menu_table.add_row("[ 6 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
         
         mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted ACL)"
         mode_color = "yellow" if cfg.get("enabled", True) else "green"
-        menu_table.add_row("7", f"[{mode_color}]🔄 {mode_label}[/]", "Toggle global firewall restriction mode")
+        menu_table.add_row("[ 7 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
         menu_table.add_row("", "", "")
-        menu_table.add_row("0", "🚪 Exit to Configuration Console", "Return to main eFa-Configure menu")
+        menu_table.add_row("[ 0 ]", "● Exit to Configuration Console", "Return to main eFa-Configure menu")
 
-        console.print(Panel(menu_table, title="[bold white]Main Menu Navigation[/]", box=box.ROUNDED, border_style="cyan"))
+        console.print(Panel(menu_table, title="[bold white]● Main Menu Navigation[/]", box=box.ROUNDED, border_style="cyan"))
 
-        choice = Prompt.ask("[bold green]Choose option[/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "q", "exit", ""]).strip()
+        choice = Prompt.ask("[bold green]Choose option [0-7][/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "q", "exit", ""]).strip()
 
         if choice in ["0", "q", "exit", ""]:
             break
         elif choice == "1":
-            manage_group_tui(cfg, "admins", "👑 ADMINS ACCESS LIST (FULL PORTS)", "Hosts and subnets with unrestricted access to ALL TCP/UDP ports and protocols", header_style="bold magenta")
+            manage_group_tui(cfg, "admins", "● ADMINS ACCESS LIST (FULL PORTS)", "Hosts and subnets with unrestricted access to ALL TCP/UDP ports and protocols", header_style="bold magenta", border_style="magenta")
         elif choice == "2":
-            manage_group_tui(cfg, "trusted", "🗄️  TRUSTED SERVICES ACCESS LIST", "Hosts allowed to connect to MariaDB (3306) and Zabbix-Agent (10050)", header_style="bold blue")
+            manage_group_tui(cfg, "trusted", "● TRUSTED SERVICES ACCESS LIST", "Hosts allowed to connect to MariaDB (3306) and Zabbix-Agent (10050)", header_style="bold blue", border_style="blue")
         elif choice == "3":
-            manage_group_tui(cfg, "http_only", "🌐 HTTP / HTTPS WEB ACCESS LIST", "Hosts allowed to access Web Interface on HTTP (80) and HTTPS (443)", header_style="bold green")
+            manage_group_tui(cfg, "http_only", "● HTTP / HTTPS WEB ACCESS LIST", "Hosts allowed to access Web Interface on HTTP (80) and HTTPS (443)", header_style="bold green", border_style="green")
         elif choice == "4":
-            manage_group_tui(cfg, "public_ports", "🌍 PUBLIC PORTS (WORLD OPEN)", "Ports open to the entire Internet (0.0.0.0/0), e.g. Port 25 SMTP", header_style="bold yellow")
+            manage_group_tui(cfg, "public_ports", "● PUBLIC PORTS (WORLD OPEN)", "Ports open to the entire Internet (0.0.0.0/0), e.g. Port 25 SMTP", header_style="bold yellow", border_style="yellow")
         elif choice == "5":
             os.system("clear")
             list_rules(cfg)
@@ -698,12 +698,12 @@ def interactive_tui():
             save_config(cfg)
             apply_firewall(cfg)
             status_str = "ENABLED (Restricted)" if cfg["enabled"] else "DISABLED (Open)"
-            Prompt.ask(f"[bold green]Protection mode set to {status_str}! Press [Enter] to continue...[/]")
+            Prompt.ask(f"[bold green]● Protection mode set to {status_str}! Press [Enter] to continue...[/]")
 
 def main():
     if os.geteuid() != 0:
         if RICH_AVAILABLE:
-            console.print("[bold red][ERROR][/] eFa-Firewall must be run as root.")
+            console.print("[bold red]ERROR:[/] eFa-Firewall must be run as root.")
         else:
             print("[ERROR] eFa-Firewall must be run as root.")
         sys.exit(1)
