@@ -163,16 +163,12 @@ def apply_firewall(cfg):
         with open("/etc/firewalld/zones/public.xml", "w", encoding="utf-8") as f:
             f.write(public_xml)
         
-        # Restore trusted zone
-        trusted_xml = """<?xml version="1.0" encoding="utf-8"?>
-<zone>
-  <short>Trusted</short>
-  <description>All network connections are accepted.</description>
-  <target>ACCEPT</target>
-</zone>
-"""
-        with open("/etc/firewalld/zones/trusted.xml", "w", encoding="utf-8") as f:
-            f.write(trusted_xml)
+        # Clean up any custom trusted.xml
+        if os.path.exists("/etc/firewalld/zones/trusted.xml"):
+            try:
+                os.remove("/etc/firewalld/zones/trusted.xml")
+            except Exception:
+                pass
 
         res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
         if res.returncode == 0:
@@ -293,17 +289,12 @@ def apply_firewall(cfg):
         f.write("\n".join(pub_lines))
     os.chmod("/etc/firewalld/zones/public.xml", 0o644)
 
-    # Ensure trusted.xml is clean with target ACCEPT
-    trusted_xml = """<?xml version="1.0" encoding="utf-8"?>
-<zone>
-  <short>Trusted</short>
-  <description>All network connections are accepted.</description>
-  <target>ACCEPT</target>
-</zone>
-"""
-    with open("/etc/firewalld/zones/trusted.xml", "w", encoding="utf-8") as f:
-        f.write(trusted_xml)
-    os.chmod("/etc/firewalld/zones/trusted.xml", 0o644)
+    # Clean up custom trusted.xml if present
+    if os.path.exists("/etc/firewalld/zones/trusted.xml"):
+        try:
+            os.remove("/etc/firewalld/zones/trusted.xml")
+        except Exception:
+            pass
 
     # Reload firewalld
     res = subprocess.run(["firewall-cmd", "--reload"], capture_output=True, text=True)
