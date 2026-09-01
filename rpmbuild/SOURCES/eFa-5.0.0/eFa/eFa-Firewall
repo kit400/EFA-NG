@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # +--------------------------------------------------------------------+
-# EFA-NG Firewall & Access Control Manager (Rich TUI Edition)
+# EFA-NG Firewall & Access Control Manager (Rich TUI & GeoIP Edition)
 # Version 20260901
 # +--------------------------------------------------------------------+
 # Copyright (C) 2026  https://efa-ng.space.ua
@@ -17,6 +17,8 @@ import json
 import subprocess
 import ipaddress
 import argparse
+import urllib.request
+import time
 
 # Try importing rich, provide clear fallback if missing
 try:
@@ -35,8 +37,44 @@ except ImportError:
 
 CONFIG_PATH = "/etc/eFa/firewall.conf"
 DEFAULT_CONFIG_PATH = "/etc/eFa/firewall.conf.default"
+GEOIP_CACHE_DIR = "/var/eFa/geoip"
 
 console = Console() if RICH_AVAILABLE else None
+
+COUNTRY_NAMES = {
+    "AD": "Andorra", "AE": "United Arab Emirates", "AF": "Afghanistan", "AG": "Antigua and Barbuda",
+    "AL": "Albania", "AM": "Armenia", "AO": "Angola", "AR": "Argentina", "AT": "Austria", "AU": "Australia",
+    "AZ": "Azerbaijan", "BA": "Bosnia and Herzegovina", "BB": "Barbados", "BD": "Bangladesh", "BE": "Belgium",
+    "BF": "Burkina Faso", "BG": "Bulgaria", "BH": "Bahrain", "BI": "Burundi", "BJ": "Benin", "BM": "Bermuda",
+    "BN": "Brunei", "BO": "Bolivia", "BR": "Brazil", "BS": "Bahamas", "BT": "Bhutan", "BW": "Botswana",
+    "BY": "Belarus", "BZ": "Belize", "CA": "Canada", "CD": "Congo (DRC)", "CF": "Central African Republic",
+    "CG": "Congo", "CH": "Switzerland", "CI": "Ivory Coast", "CL": "Chile", "CM": "Cameroon", "CN": "China",
+    "CO": "Colombia", "CR": "Costa Rica", "CU": "Cuba", "CV": "Cape Verde", "CY": "Cyprus", "CZ": "Czech Republic",
+    "DE": "Germany", "DJ": "Djibouti", "DK": "Denmark", "DM": "Dominica", "DO": "Dominican Republic",
+    "DZ": "Algeria", "EC": "Ecuador", "EE": "Estonia", "EG": "Egypt", "ES": "Spain", "ET": "Ethiopia",
+    "FI": "Finland", "FJ": "Fiji", "FR": "France", "GA": "Gabon", "GB": "United Kingdom", "GE": "Georgia",
+    "GH": "Ghana", "GM": "Gambia", "GN": "Guinea", "GR": "Greece", "GT": "Guatemala", "HK": "Hong Kong",
+    "HN": "Honduras", "HR": "Croatia", "HT": "Haiti", "HU": "Hungary", "ID": "Indonesia", "IE": "Ireland",
+    "IL": "Israel", "IN": "India", "IQ": "Iraq", "IR": "Iran", "IS": "Iceland", "IT": "Italy", "JM": "Jamaica",
+    "JO": "Jordan", "JP": "Japan", "KE": "Kenya", "KG": "Kyrgyzstan", "KH": "Cambodia", "KR": "South Korea",
+    "KW": "Kuwait", "KZ": "Kazakhstan", "LA": "Laos", "LB": "Lebanon", "LI": "Liechtenstein", "LK": "Sri Lanka",
+    "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "LY": "Libya", "MA": "Morocco", "MC": "Monaco",
+    "MD": "Moldova", "ME": "Montenegro", "MG": "Madagascar", "MK": "North Macedonia", "ML": "Mali",
+    "MM": "Myanmar", "MN": "Mongolia", "MO": "Macau", "MT": "Malta", "MU": "Mauritius", "MV": "Maldives",
+    "MX": "Mexico", "MY": "Malaysia", "MZ": "Mozambique", "NA": "Namibia", "NG": "Nigeria", "NI": "Nicaragua",
+    "NL": "Netherlands", "NO": "Norway", "NP": "Nepal", "NZ": "New Zealand", "OM": "Oman", "PA": "Panama",
+    "PE": "Peru", "PH": "Philippines", "PK": "Pakistan", "PL": "Poland", "PT": "Portugal", "PY": "Paraguay",
+    "QA": "Qatar", "RO": "Romania", "RS": "Serbia", "RU": "Russian Federation", "RW": "Rwanda",
+    "SA": "Saudi Arabia", "SC": "Seychelles", "SD": "Sudan", "SE": "Sweden", "SG": "Singapore",
+    "SI": "Slovenia", "SK": "Slovakia", "SN": "Senegal", "SO": "Somalia", "SY": "Syria", "TH": "Thailand",
+    "TJ": "Tajikistan", "TM": "Turkmenistan", "TN": "Tunisia", "TR": "Turkey", "TW": "Taiwan",
+    "TZ": "Tanzania", "UA": "Ukraine", "UG": "Uganda", "US": "United States", "UY": "Uruguay",
+    "UZ": "Uzbekistan", "VE": "Venezuela", "VN": "Vietnam", "YE": "Yemen", "ZA": "South Africa",
+    "ZM": "Zambia", "ZW": "Zimbabwe"
+}
+
+def get_country_name(code):
+    return COUNTRY_NAMES.get(code.upper(), code.upper())
 
 def get_default_config():
     return {
@@ -93,6 +131,36 @@ def get_default_config():
                 {"ip": "195.230.150.225", "comment": "Remote Mail Client 4"},
                 {"ip": "195.230.150.69", "comment": "Dev Server Mail Access"}
             ]
+        },
+        "geoip": {
+            "enabled": True,
+            "global_blacklist": [
+                {"country": "RU", "comment": "Russian Federation (Global Drop)"},
+                {"country": "CN", "comment": "China (Global Drop)"},
+                {"country": "BR", "comment": "Brazil (Global Drop)"}
+            ],
+            "groups": {
+                "http_only": {
+                    "mode": "whitelist",
+                    "countries": [
+                        {"country": "UA", "comment": "Ukraine"},
+                        {"country": "US", "comment": "United States"},
+                        {"country": "DE", "comment": "Germany"}
+                    ]
+                },
+                "mail_clients": {
+                    "mode": "disabled",
+                    "countries": []
+                },
+                "public_ports": {
+                    "mode": "disabled",
+                    "countries": []
+                },
+                "trusted": {
+                    "mode": "disabled",
+                    "countries": []
+                }
+            }
         }
     }
 
@@ -101,7 +169,7 @@ def load_config():
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
-                # Ensure mail_clients structure exists if loading older config
+                dirty = False
                 if "mail_clients" not in cfg:
                     cfg["mail_clients"] = {
                         "ports": [
@@ -113,6 +181,20 @@ def load_config():
                         ],
                         "entries": []
                     }
+                    dirty = True
+                if "geoip" not in cfg:
+                    cfg["geoip"] = {
+                        "enabled": True,
+                        "global_blacklist": [],
+                        "groups": {
+                            "http_only": {"mode": "disabled", "countries": []},
+                            "mail_clients": {"mode": "disabled", "countries": []},
+                            "public_ports": {"mode": "disabled", "countries": []},
+                            "trusted": {"mode": "disabled", "countries": []}
+                        }
+                    }
+                    dirty = True
+                if dirty:
                     save_config(cfg)
                 return cfg
         except Exception as e:
@@ -155,6 +237,134 @@ def normalize_ip(ip_str):
     except ValueError:
         return None, None
 
+# ----------------- GeoIP Fetch & Cache Engine -----------------
+def fetch_country_zone(country_code, force=False):
+    os.makedirs(GEOIP_CACHE_DIR, exist_ok=True)
+    cc = country_code.strip().lower()
+    f_v4 = os.path.join(GEOIP_CACHE_DIR, f"{cc}.zone")
+    f_v6 = os.path.join(GEOIP_CACHE_DIR, f"{cc}6.zone")
+
+    # Check cache freshness (refresh if older than 14 days or force)
+    need_v4 = force or not os.path.exists(f_v4) or (time.time() - os.path.getmtime(f_v4) > 14 * 86400)
+    need_v6 = force or not os.path.exists(f_v6) or (time.time() - os.path.getmtime(f_v6) > 14 * 86400)
+
+    if need_v4:
+        v4_lines = []
+        # Try ipdeny.com
+        try:
+            url = f"http://www.ipdeny.com/ipblocks/data/countries/{cc}.zone"
+            req = urllib.request.Request(url, headers={"User-Agent": "eFa-Firewall/6.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                for line in resp.read().decode("utf-8", errors="ignore").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        v4_lines.append(line)
+        except Exception:
+            pass
+
+        # Fallback to ipverse
+        if not v4_lines:
+            try:
+                url = f"https://raw.githubusercontent.com/ipverse/rir-ip/master/country/{cc}/ipv4-aggregated.txt"
+                req = urllib.request.Request(url, headers={"User-Agent": "eFa-Firewall/6.0"})
+                with urllib.request.urlopen(req, timeout=8) as resp:
+                    for line in resp.read().decode("utf-8", errors="ignore").splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            v4_lines.append(line)
+            except Exception:
+                pass
+
+        if v4_lines:
+            with open(f_v4, "w", encoding="utf-8") as f:
+                f.write("\n".join(v4_lines) + "\n")
+
+    if need_v6:
+        v6_lines = []
+        try:
+            url = f"https://raw.githubusercontent.com/ipverse/rir-ip/master/country/{cc}/ipv6-aggregated.txt"
+            req = urllib.request.Request(url, headers={"User-Agent": "eFa-Firewall/6.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                for line in resp.read().decode("utf-8", errors="ignore").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        v6_lines.append(line)
+        except Exception:
+            pass
+
+        if v6_lines:
+            with open(f_v6, "w", encoding="utf-8") as f:
+                f.write("\n".join(v6_lines) + "\n")
+
+def get_country_cidrs(country_code, auto_fetch=True):
+    cc = country_code.strip().lower()
+    f_v4 = os.path.join(GEOIP_CACHE_DIR, f"{cc}.zone")
+    f_v6 = os.path.join(GEOIP_CACHE_DIR, f"{cc}6.zone")
+
+    if auto_fetch and (not os.path.exists(f_v4) or not os.path.exists(f_v6)):
+        fetch_country_zone(cc)
+
+    v4_cidrs = set()
+    v6_cidrs = set()
+
+    if os.path.exists(f_v4):
+        with open(f_v4, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    v4_cidrs.add(line)
+
+    if os.path.exists(f_v6):
+        with open(f_v6, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    v6_cidrs.add(line)
+
+    return v4_cidrs, v6_cidrs
+
+def update_all_geoip_caches(cfg, silent=False):
+    if not silent:
+        if RICH_AVAILABLE:
+            console.print("[bold cyan]● Updating GeoIP country CIDR zone caches...[/]")
+        else:
+            print("[eFa-Firewall] Updating GeoIP country CIDR zone caches...")
+
+    countries = set()
+    for item in cfg.get("geoip", {}).get("global_blacklist", []):
+        c = item.get("country", "").strip().upper()
+        if c:
+            countries.add(c)
+
+    for gname, gdata in cfg.get("geoip", {}).get("groups", {}).items():
+        for item in gdata.get("countries", []):
+            c = item.get("country", "").strip().upper()
+            if c:
+                countries.add(c)
+
+    if not countries:
+        if not silent:
+            if RICH_AVAILABLE:
+                console.print("[yellow]● No GeoIP countries configured.[/]")
+            else:
+                print("No GeoIP countries configured.")
+        return
+
+    for c in sorted(countries):
+        if not silent and RICH_AVAILABLE:
+            console.print(f"  Fetching CIDRs for [bold white]{c}[/] ({get_country_name(c)})...")
+        fetch_country_zone(c, force=True)
+        v4, v6 = get_country_cidrs(c, auto_fetch=False)
+        if not silent and RICH_AVAILABLE:
+            console.print(f"  [green]✔ {c}: {len(v4)} IPv4 CIDRs, {len(v6)} IPv6 CIDRs[/]")
+
+    if not silent:
+        if RICH_AVAILABLE:
+            console.print("[bold green]● GeoIP zone cache update complete.[/]")
+        else:
+            print("[eFa-Firewall] GeoIP zone cache update complete.")
+
+# ----------------- Firewalld XML Generator -----------------
 def write_firewalld_ipset_xml(name, description, entries, family="inet"):
     os.makedirs("/etc/firewalld/ipsets", exist_ok=True)
     xml_file = f"/etc/firewalld/ipsets/{name}.xml"
@@ -163,6 +373,7 @@ def write_firewalld_ipset_xml(name, description, entries, family="inet"):
     lines.append('<ipset type="hash:net">')
     lines.append(f'  <short>{name}</short>')
     lines.append(f'  <description>{description}</description>')
+    lines.append('  <option name="maxelem" value="1000000"/>')
     if family == "inet6":
         lines.append('  <option name="family" value="inet6"/>')
     for e in sorted(entries):
@@ -234,7 +445,7 @@ def apply_firewall(cfg, silent=False):
                 print(f"[ERROR] Failed to reload firewalld: {res.stderr}")
             return False
 
-    # Extract IPs
+    # 1. Static IPs
     admin_v4 = set()
     admin_v6 = set()
     for item in cfg.get("admins", []):
@@ -245,7 +456,6 @@ def apply_firewall(cfg, silent=False):
         elif ver == 6:
             admin_v6.add(norm)
 
-    # Always ensure 127.0.0.1 and ::1 are in admins
     admin_v4.add("127.0.0.1")
     admin_v6.add("::1")
 
@@ -279,97 +489,209 @@ def apply_firewall(cfg, silent=False):
         elif ver == 6:
             mail_v6.add(norm)
 
-    # Write IPSet XMLs
+    # 2. GeoIP Processing
+    geo_cfg = cfg.get("geoip", {})
+    geo_enabled = geo_cfg.get("enabled", True)
+
+    # Global Blacklist
+    geo_bl_v4 = set()
+    geo_bl_v6 = set()
+    if geo_enabled:
+        for item in geo_cfg.get("global_blacklist", []):
+            cc = item.get("country", "")
+            if cc:
+                v4, v6 = get_country_cidrs(cc)
+                geo_bl_v4.update(v4)
+                geo_bl_v6.update(v6)
+
+    # Per-Group GeoIP Sets
+    group_geo = geo_cfg.get("groups", {})
+
+    def get_group_geo_cidrs(gname):
+        wl_v4, wl_v6 = set(), set()
+        bl_v4, bl_v6 = set(), set()
+        if not geo_enabled:
+            return "disabled", wl_v4, wl_v6, bl_v4, bl_v6
+
+        gdata = group_geo.get(gname, {})
+        mode = gdata.get("mode", "disabled").lower()
+        if mode == "whitelist":
+            for item in gdata.get("countries", []):
+                cc = item.get("country", "")
+                if cc:
+                    v4, v6 = get_country_cidrs(cc)
+                    wl_v4.update(v4)
+                    wl_v6.update(v6)
+        elif mode == "blacklist":
+            for item in gdata.get("countries", []):
+                cc = item.get("country", "")
+                if cc:
+                    v4, v6 = get_country_cidrs(cc)
+                    bl_v4.update(v4)
+                    bl_v6.update(v6)
+        return mode, wl_v4, wl_v6, bl_v4, bl_v6
+
+    http_geo_mode, http_gwl_v4, http_gwl_v6, http_gbl_v4, http_gbl_v6 = get_group_geo_cidrs("http_only")
+    mail_geo_mode, mail_gwl_v4, mail_gwl_v6, mail_gbl_v4, mail_gbl_v6 = get_group_geo_cidrs("mail_clients")
+    trust_geo_mode, trust_gwl_v4, trust_gwl_v6, trust_gbl_v4, trust_gbl_v6 = get_group_geo_cidrs("trusted")
+    pub_geo_mode, pub_gwl_v4, pub_gwl_v6, pub_gbl_v4, pub_gbl_v6 = get_group_geo_cidrs("public_ports")
+
+    # 3. Write IPSet XMLs
     write_firewalld_ipset_xml("efa_admins", "EFA-NG Admins (Full Access)", admin_v4, family="inet")
     if admin_v6:
         write_firewalld_ipset_xml("efa_admins6", "EFA-NG Admins IPv6 (Full Access)", admin_v6, family="inet6")
     
-    if trusted_v4:
-        write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services (MariaDB, Zabbix)", trusted_v4, family="inet")
-    else:
-        write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services", ["127.0.0.1"], family="inet")
+    write_firewalld_ipset_xml("efa_trusted", "EFA-NG Trusted Services", trusted_v4 or ["127.0.0.1"], family="inet")
+    write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", http_v4 or ["127.0.0.1"], family="inet")
+    write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access", mail_v4 or ["127.0.0.1"], family="inet")
 
-    if http_v4:
-        write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", http_v4, family="inet")
-    else:
-        write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", ["127.0.0.1"], family="inet")
+    # Write GeoIP IPSet XMLs
+    if geo_bl_v4:
+        write_firewalld_ipset_xml("efa_geo_block_v4", "EFA-NG GeoIP Global Blacklist IPv4", geo_bl_v4, family="inet")
+    if geo_bl_v6:
+        write_firewalld_ipset_xml("efa_geo_block_v6", "EFA-NG GeoIP Global Blacklist IPv6", geo_bl_v6, family="inet6")
 
-    if mail_v4:
-        write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access (POP3, IMAP, Submission)", mail_v4, family="inet")
-    else:
-        write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access", ["127.0.0.1"], family="inet")
+    # Group GeoIP IPSets
+    if http_gwl_v4:
+        write_firewalld_ipset_xml("efa_geo_http_wl_v4", "EFA-NG GeoIP HTTP Whitelist IPv4", http_gwl_v4, family="inet")
+    if http_gwl_v6:
+        write_firewalld_ipset_xml("efa_geo_http_wl_v6", "EFA-NG GeoIP HTTP Whitelist IPv6", http_gwl_v6, family="inet6")
+    if http_gbl_v4:
+        write_firewalld_ipset_xml("efa_geo_http_bl_v4", "EFA-NG GeoIP HTTP Blacklist IPv4", http_gbl_v4, family="inet")
 
-    # Generate public.xml
+    if mail_gwl_v4:
+        write_firewalld_ipset_xml("efa_geo_mail_wl_v4", "EFA-NG GeoIP Mail Whitelist IPv4", mail_gwl_v4, family="inet")
+    if mail_gwl_v6:
+        write_firewalld_ipset_xml("efa_geo_mail_wl_v6", "EFA-NG GeoIP Mail Whitelist IPv6", mail_gwl_v6, family="inet6")
+    if mail_gbl_v4:
+        write_firewalld_ipset_xml("efa_geo_mail_bl_v4", "EFA-NG GeoIP Mail Blacklist IPv4", mail_gbl_v4, family="inet")
+
+    if trust_gwl_v4:
+        write_firewalld_ipset_xml("efa_geo_trust_wl_v4", "EFA-NG GeoIP Trusted Whitelist IPv4", trust_gwl_v4, family="inet")
+    if trust_gbl_v4:
+        write_firewalld_ipset_xml("efa_geo_trust_bl_v4", "EFA-NG GeoIP Trusted Blacklist IPv4", trust_gbl_v4, family="inet")
+
+    if pub_gwl_v4:
+        write_firewalld_ipset_xml("efa_geo_pub_wl_v4", "EFA-NG GeoIP Public Whitelist IPv4", pub_gwl_v4, family="inet")
+    if pub_gbl_v4:
+        write_firewalld_ipset_xml("efa_geo_pub_bl_v4", "EFA-NG GeoIP Public Blacklist IPv4", pub_gbl_v4, family="inet")
+
+    # 4. Generate public.xml
     pub_lines = ['<?xml version="1.0" encoding="utf-8"?>']
     pub_lines.append('<zone>')
     pub_lines.append('  <short>Public</short>')
     pub_lines.append('  <description>EFA-NG Protected Zone</description>')
-    
-    # Public services
     pub_lines.append('  <service name="dhcpv6-client"/>')
+
+    # If public_ports has port 25 and no GeoIP Whitelist restricting it, add smtp service
+    has_port_25 = any(str(p.get("port", "")).strip() == "25" for p in cfg.get("public_ports", []))
+    if has_port_25 and pub_geo_mode != "whitelist":
+        pub_lines.append('  <service name="smtp"/>')
+
+    # Other open public ports (if no public whitelist)
     for p in cfg.get("public_ports", []):
         port_num = str(p.get("port", "")).strip()
         proto = p.get("proto", "tcp").lower()
-        if port_num:
-            if port_num == "25" and proto == "tcp":
-                pub_lines.append('  <service name="smtp"/>')
-            else:
-                pub_lines.append(f'  <port port="{port_num}" protocol="{proto}"/>')
+        if port_num and port_num != "25" and pub_geo_mode != "whitelist":
+            pub_lines.append(f'  <port port="{port_num}" protocol="{proto}"/>')
 
-    # Rich rules: Admins (Full Access)
+    # Rule: Admins (Full Access) - Takes precedence
     pub_lines.append('  <rule family="ipv4">')
     pub_lines.append('    <source ipset="efa_admins"/>')
     pub_lines.append('    <accept/>')
     pub_lines.append('  </rule>')
-
     if admin_v6:
         pub_lines.append('  <rule family="ipv6">')
         pub_lines.append('    <source ipset="efa_admins6"/>')
         pub_lines.append('    <accept/>')
         pub_lines.append('  </rule>')
 
-    # Rich rules: Trusted Ports
+    # Rule: Global GeoIP Blacklist (Drop all traffic across all ports)
+    if geo_bl_v4:
+        pub_lines.append('  <rule family="ipv4">')
+        pub_lines.append('    <source ipset="efa_geo_block_v4"/>')
+        pub_lines.append('    <drop/>')
+        pub_lines.append('  </rule>')
+    if geo_bl_v6:
+        pub_lines.append('  <rule family="ipv6">')
+        pub_lines.append('    <source ipset="efa_geo_block_v6"/>')
+        pub_lines.append('    <drop/>')
+        pub_lines.append('  </rule>')
+
+    # Rule: Group-specific GeoIP Blacklists (Drop)
+    # HTTP Group BL
+    if http_gbl_v4:
+        for hp in cfg.get("http_only", {}).get("ports", [{"port": "80", "proto": "tcp"}, {"port": "443", "proto": "tcp"}]):
+            pnum = str(hp.get("port", "")).strip()
+            prt = hp.get("proto", "tcp").lower()
+            if pnum:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_http_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
+
+    # Mail Clients Group BL
+    if mail_gbl_v4:
+        for mp in cfg.get("mail_clients", {}).get("ports", [{"port": "110", "proto": "tcp"}, {"port": "143", "proto": "tcp"}, {"port": "587", "proto": "tcp"}, {"port": "993", "proto": "tcp"}, {"port": "995", "proto": "tcp"}]):
+            pnum = str(mp.get("port", "")).strip()
+            prt = mp.get("proto", "tcp").lower()
+            if pnum:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_mail_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
+
+    # Trusted Group BL
+    if trust_gbl_v4:
+        for tp in cfg.get("trusted", {}).get("ports", [{"port": "3306", "proto": "tcp"}, {"port": "10050", "proto": "tcp"}]):
+            pnum = str(tp.get("port", "")).strip()
+            prt = tp.get("proto", "tcp").lower()
+            if pnum:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_trust_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
+
+    # Public Group BL
+    if pub_gbl_v4:
+        for pp in cfg.get("public_ports", []):
+            pnum = str(pp.get("port", "")).strip()
+            prt = pp.get("proto", "tcp").lower()
+            if pnum:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_pub_bl_v4"/><port port="{pnum}" protocol="{prt}"/><drop/></rule>')
+
+    # Rule: Trusted Ports (Static ACL + GeoIP Whitelist)
     trusted_ports = cfg.get("trusted", {}).get("ports", [{"port": "3306", "proto": "tcp"}, {"port": "10050", "proto": "tcp"}])
     for tp in trusted_ports:
         port_num = str(tp.get("port", "")).strip()
         proto = tp.get("proto", "tcp").lower()
         if port_num:
-            pub_lines.append('  <rule family="ipv4">')
-            pub_lines.append('    <source ipset="efa_trusted"/>')
-            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
-            pub_lines.append('    <accept/>')
-            pub_lines.append('  </rule>')
+            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_trusted"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+            if trust_gwl_v4:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_trust_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
 
-    # Rich rules: HTTP / HTTPS Ports
+    # Rule: HTTP / HTTPS Ports (Static ACL + GeoIP Whitelist)
     http_ports = cfg.get("http_only", {}).get("ports", [{"port": "80", "proto": "tcp"}, {"port": "443", "proto": "tcp"}])
     for hp in http_ports:
         port_num = str(hp.get("port", "")).strip()
         proto = hp.get("proto", "tcp").lower()
         if port_num:
-            pub_lines.append('  <rule family="ipv4">')
-            pub_lines.append('    <source ipset="efa_http"/>')
-            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
-            pub_lines.append('    <accept/>')
-            pub_lines.append('  </rule>')
+            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_http"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+            if http_gwl_v4:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_http_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+            if http_gwl_v6:
+                pub_lines.append(f'  <rule family="ipv6"><source ipset="efa_geo_http_wl_v6"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
 
-    # Rich rules: Mail Clients Ports (110, 143, 587, 993, 995)
-    default_mail_ports = [
-        {"port": "110", "proto": "tcp"},
-        {"port": "143", "proto": "tcp"},
-        {"port": "587", "proto": "tcp"},
-        {"port": "993", "proto": "tcp"},
-        {"port": "995", "proto": "tcp"}
-    ]
-    mail_ports = cfg.get("mail_clients", {}).get("ports", default_mail_ports)
+    # Rule: Mail Clients Ports (Static ACL + GeoIP Whitelist)
+    mail_ports = cfg.get("mail_clients", {}).get("ports", [{"port": "110", "proto": "tcp"}, {"port": "143", "proto": "tcp"}, {"port": "587", "proto": "tcp"}, {"port": "993", "proto": "tcp"}, {"port": "995", "proto": "tcp"}])
     for mp in mail_ports:
         port_num = str(mp.get("port", "")).strip()
         proto = mp.get("proto", "tcp").lower()
         if port_num:
-            pub_lines.append('  <rule family="ipv4">')
-            pub_lines.append('    <source ipset="efa_mail"/>')
-            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
-            pub_lines.append('    <accept/>')
-            pub_lines.append('  </rule>')
+            pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_mail"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+            if mail_gwl_v4:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_mail_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+            if mail_gwl_v6:
+                pub_lines.append(f'  <rule family="ipv6"><source ipset="efa_geo_mail_wl_v6"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
+
+    # Rule: Public Ports (if Whitelisted by Country)
+    if pub_geo_mode == "whitelist" and pub_gwl_v4:
+        for pp in cfg.get("public_ports", []):
+            port_num = str(pp.get("port", "")).strip()
+            proto = pp.get("proto", "tcp").lower()
+            if port_num:
+                pub_lines.append(f'  <rule family="ipv4"><source ipset="efa_geo_pub_wl_v4"/><port port="{port_num}" protocol="{proto}"/><accept/></rule>')
 
     pub_lines.append('  <forward/>')
     pub_lines.append('</zone>\n')
@@ -378,7 +700,6 @@ def apply_firewall(cfg, silent=False):
         f.write("\n".join(pub_lines))
     os.chmod("/etc/firewalld/zones/public.xml", 0o644)
 
-    # Clean up custom trusted.xml if present
     if os.path.exists("/etc/firewalld/zones/trusted.xml"):
         try:
             os.remove("/etc/firewalld/zones/trusted.xml")
@@ -401,6 +722,7 @@ def apply_firewall(cfg, silent=False):
             print(f"[ERROR] Firewall reload returned error:\n{res.stderr}")
         return False
 
+# ----------------- Status and List Displays -----------------
 def show_status(cfg):
     is_fw_active = False
     try:
@@ -420,7 +742,7 @@ def show_status(cfg):
     # Header Panel
     header_text = Text()
     header_text.append("EFA-NG FIREWALL & ACCESS CONTROL MANAGER", style="bold cyan")
-    header_text.append("\nCentOS Stream 10  •  NFTables / FirewallD Engine  •  https://efa-ng.space.ua", style="dim white")
+    header_text.append("\nCentOS Stream 10  •  NFTables / FirewallD / GeoIP Engine  •  https://efa-ng.space.ua", style="dim white")
     console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
 
     # Status Cards
@@ -433,9 +755,24 @@ def show_status(cfg):
     num_mail = len(cfg.get("mail_clients", {}).get("entries", []))
     num_pub = len(cfg.get("public_ports", []))
 
+    # GeoIP summary
+    geo_cfg = cfg.get("geoip", {})
+    geo_gbl = [item.get("country", "") for item in geo_cfg.get("global_blacklist", []) if item.get("country")]
+    geo_gbl_str = f"[bold red]● {len(geo_gbl)} Countries Blocked[/] ({', '.join(geo_gbl[:6])}{'...' if len(geo_gbl)>6 else ''})" if geo_gbl else "[dim]None configured[/]"
+
+    http_geo = geo_cfg.get("groups", {}).get("http_only", {})
+    http_geo_mode = http_geo.get("mode", "disabled").upper()
+    http_geo_cnt = [c.get("country", "") for c in http_geo.get("countries", []) if c.get("country")]
+    http_geo_str = f"[{'bold green' if http_geo_mode=='WHITELIST' else 'bold yellow'}]{http_geo_mode}[/] ({', '.join(http_geo_cnt)})" if http_geo_mode != "DISABLED" else "[dim]Disabled (Static ACL only)[/]"
+
+    mail_geo = geo_cfg.get("groups", {}).get("mail_clients", {})
+    mail_geo_mode = mail_geo.get("mode", "disabled").upper()
+    mail_geo_cnt = [c.get("country", "") for c in mail_geo.get("countries", []) if c.get("country")]
+    mail_geo_str = f"[{'bold green' if mail_geo_mode=='WHITELIST' else 'bold yellow'}]{mail_geo_mode}[/] ({', '.join(mail_geo_cnt)})" if mail_geo_mode != "DISABLED" else "[dim]Disabled (Static ACL only)[/]"
+
     summary_table = Table(box=box.SIMPLE_HEAVY, show_header=False, expand=True)
-    summary_table.add_column("Key", style="bold cyan", width=32)
-    summary_table.add_column("Value", style="bold white")
+    summary_table.add_column("Key", style="bold cyan", width=32, min_width=32, max_width=32, no_wrap=True)
+    summary_table.add_column("Value", style="bold white", ratio=1)
 
     summary_table.add_row("●  Firewall Service", fw_badge)
     summary_table.add_row("●  Protection Mode", mode_badge)
@@ -444,6 +781,9 @@ def show_status(cfg):
     summary_table.add_row("●  HTTP / HTTPS Web Access", f"[bold white]{num_http}[/] networks (Ports: 80, 443)")
     summary_table.add_row("●  Mail Clients & Submission", f"[bold white]{num_mail}[/] networks (Ports: 110, 143, 587, 993, 995)")
     summary_table.add_row("●  Public World Access", f"[bold white]{num_pub}[/] ports (Port: 25/tcp SMTP)")
+    summary_table.add_row("●  Global Country Blacklist", geo_gbl_str)
+    summary_table.add_row("●  HTTP / HTTPS GeoIP Filter", http_geo_str)
+    summary_table.add_row("●  Mail Clients GeoIP Filter", mail_geo_str)
 
     console.print(Panel(summary_table, title="[bold white]● System Status Overview[/]", box=box.ROUNDED, border_style="blue"))
 
@@ -511,8 +851,48 @@ def list_rules(cfg):
             p = f"{item.get('port')}/{item.get('proto', 'tcp')}"
             t_pub.add_row(f"[ {idx:2d} ]", "0.0.0.0/0 (Any)", p, item.get("comment", ""))
     console.print(t_pub)
+
+    # 6. GeoIP Global Blacklist Table
+    t_geo_bl = Table(title="● GEOIP GLOBAL BLACKLIST (Dropped on ALL Ports for Entire Server)", box=box.ROUNDED, header_style="bold red", border_style="red", expand=True)
+    t_geo_bl.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
+    t_geo_bl.add_column("Country / Region", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+    t_geo_bl.add_column("Policy / Action", style="bold red", width=26, min_width=26, max_width=26, no_wrap=True)
+    t_geo_bl.add_column("Description / Label", style="italic yellow", ratio=1)
+
+    gbl_entries = cfg.get("geoip", {}).get("global_blacklist", [])
+    if not gbl_entries:
+        t_geo_bl.add_row("[ - ]", "None configured", "-", "-")
+    else:
+        for idx, item in enumerate(gbl_entries, 1):
+            cc = item.get("country", "").upper()
+            cname = get_country_name(cc)
+            t_geo_bl.add_row(f"[ {idx:2d} ]", f"{cc} ({cname})", "DROP ALL TRAFFIC", item.get("comment", ""))
+    console.print(t_geo_bl)
+
+    # 7. GeoIP Group Policies Table
+    t_geo_grp = Table(title="● GEOIP PER-GROUP ACCESS POLICIES (Whitelist / Blacklist)", box=box.ROUNDED, header_style="bold bright_cyan", border_style="bright_cyan", expand=True)
+    t_geo_grp.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
+    t_geo_grp.add_column("Group / Service", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+    t_geo_grp.add_column("Filter Mode", style="bold green", width=26, min_width=26, max_width=26, no_wrap=True)
+    t_geo_grp.add_column("Countries / Rules", style="italic yellow", ratio=1)
+
+    groups_info = [
+        ("http_only", "HTTP / HTTPS (80, 443)"),
+        ("mail_clients", "Mail Clients (110..995)"),
+        ("public_ports", "Public Ports (25 SMTP)"),
+        ("trusted", "Trusted (3306, 10050)")
+    ]
+    for idx, (gkey, glabel) in enumerate(groups_info, 1):
+        gdata = cfg.get("geoip", {}).get("groups", {}).get(gkey, {})
+        gmode = gdata.get("mode", "disabled").upper()
+        clist = [f"{c.get('country')}" for c in gdata.get("countries", []) if c.get("country")]
+        c_str = f"Allowed: {', '.join(clist)}" if gmode == "WHITELIST" else (f"Blocked: {', '.join(clist)}" if gmode == "BLACKLIST" else "Disabled (Static ACL only)")
+        mode_styled = f"[bold green]{gmode}[/]" if gmode == "WHITELIST" else (f"[bold red]{gmode}[/]" if gmode == "BLACKLIST" else "[dim]DISABLED[/]")
+        t_geo_grp.add_row(f"[ {idx:2d} ]", glabel, mode_styled, c_str)
+    console.print(t_geo_grp)
     console.print("")
 
+# ----------------- CLI Management Functions -----------------
 def cli_add_entry(cfg, group, ip, comment=""):
     norm, ver = normalize_ip(ip)
     if not norm:
@@ -685,7 +1065,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
                     console.print("[bold red]Invalid IP or CIDR network format.[/]")
                     Prompt.ask("Press Enter to continue...")
                     continue
-                comm = Prompt.ask("Enter comment / description (e.g. Office LAN / Mail User / Client Subnet)").strip()
+                comm = Prompt.ask("Enter comment / description (e.g. Office LAN / Client Subnet)").strip()
                 entries.append({"ip": norm, "comment": comm})
                 save_config(cfg)
                 apply_firewall(cfg)
@@ -722,6 +1102,241 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
                 console.print("[bold red]Invalid entry number.[/]")
                 Prompt.ask("Press Enter to continue...")
 
+# ----------------- Interactive GeoIP TUI Submenus -----------------
+def manage_global_blacklist_tui(cfg):
+    while True:
+        os.system("clear")
+        header_text = Text()
+        header_text.append("● GEOIP GLOBAL COUNTRY BLACKLIST\n", style="bold red")
+        header_text.append("Traffic from these countries will be unconditionally DROPPED across all ports for entire server", style="dim white")
+        console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="red"))
+
+        entries = cfg.setdefault("geoip", {}).setdefault("global_blacklist", [])
+
+        t = Table(box=box.ROUNDED, header_style="bold red", border_style="red", expand=True)
+        t.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
+        t.add_column("Country / Code", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+        t.add_column("Action", style="bold red", width=26, min_width=26, max_width=26, no_wrap=True)
+        t.add_column("Description / Label", style="italic yellow", ratio=1)
+
+        if not entries:
+            t.add_row("[ - ]", "No countries blocked", "-", "-")
+        else:
+            for idx, item in enumerate(entries, 1):
+                cc = item.get("country", "").upper()
+                cname = get_country_name(cc)
+                t.add_row(f"[ {idx:2d} ]", f"{cc} ({cname})", "DROP ALL TRAFFIC", item.get("comment", ""))
+
+        console.print(t)
+
+        action_table = Table(box=box.SIMPLE, show_header=False, expand=True)
+        action_table.add_column("Key", style="bold cyan", width=10, justify="center")
+        action_table.add_column("Action", style="white")
+        action_table.add_row("[ A ]", "● Add country to Global Blacklist (e.g. RU, CN, BR)")
+        action_table.add_row("[ E ]", "● Edit description / comment of an entry")
+        action_table.add_row("[ D ]", "● Remove country from Global Blacklist")
+        action_table.add_row("[ B ]", "● Back to GeoIP Menu")
+        console.print(Panel(action_table, title="[bold white]● Available Actions[/]", box=box.ROUNDED, border_style="dim white"))
+
+        choice = Prompt.ask("[bold green]Choose action [A/E/D/B][/]", choices=["a", "e", "d", "b", "q", ""], default="b").strip().lower()
+
+        if choice in ["b", "q", ""]:
+            break
+        elif choice == "a":
+            cc_in = Prompt.ask("Enter 2-letter Country Code (e.g. RU, CN, BR, IR, KP)").strip().upper()
+            if len(cc_in) != 2 or not cc_in.isalpha():
+                console.print("[bold red]Invalid country code. Must be 2 letters (e.g. RU).[/]")
+                Prompt.ask("Press Enter...")
+                continue
+            cname = get_country_name(cc_in)
+            comm = Prompt.ask(f"Enter description / reason (Country: {cname})", default=f"{cname} (Blocked globally)").strip()
+            
+            # Fetch zone files
+            console.print(f"[cyan]Fetching CIDRs for {cc_in} ({cname})...[/]")
+            fetch_country_zone(cc_in)
+            v4, v6 = get_country_cidrs(cc_in)
+            console.print(f"[green]✔ Cached {len(v4)} IPv4 CIDRs and {len(v6)} IPv6 CIDRs for {cc_in}.[/]")
+
+            # Add or update
+            found = False
+            for it in entries:
+                if it.get("country", "").upper() == cc_in:
+                    it["comment"] = comm
+                    found = True
+                    break
+            if not found:
+                entries.append({"country": cc_in, "comment": comm})
+            
+            save_config(cfg)
+            apply_firewall(cfg)
+            Prompt.ask("[bold green]● Country added to Global Blacklist! Press Enter...[/]")
+        elif choice == "e":
+            if not entries:
+                continue
+            idx_in = Prompt.ask(f"Enter number to edit [1-{len(entries)}]").strip()
+            if idx_in.isdigit() and 1 <= int(idx_in) <= len(entries):
+                item = entries[int(idx_in)-1]
+                new_comm = Prompt.ask("Enter new description", default=item.get("comment", "")).strip()
+                if new_comm:
+                    item["comment"] = new_comm
+                    save_config(cfg)
+                    Prompt.ask("[bold green]● Description updated! Press Enter...[/]")
+        elif choice == "d":
+            if not entries:
+                continue
+            idx_in = Prompt.ask(f"Enter number to delete [1-{len(entries)}]").strip()
+            if idx_in.isdigit() and 1 <= int(idx_in) <= len(entries):
+                del_item = entries.pop(int(idx_in)-1)
+                save_config(cfg)
+                apply_firewall(cfg)
+                Prompt.ask(f"[bold green]● Removed {del_item.get('country')} from Global Blacklist! Press Enter...[/]")
+
+def manage_group_geoip_tui(cfg, gkey, gname, ports_desc):
+    while True:
+        os.system("clear")
+        gdata = cfg.setdefault("geoip", {}).setdefault("groups", {}).setdefault(gkey, {"mode": "disabled", "countries": []})
+        mode = gdata.get("mode", "disabled").lower()
+        mode_styled = "[bold green]WHITELIST[/]" if mode == "whitelist" else ("[bold red]BLACKLIST[/]" if mode == "blacklist" else "[bold yellow]DISABLED[/]")
+
+        header_text = Text()
+        header_text.append(f"● GEOIP POLICY FOR: {gname.upper()}\n", style="bold cyan")
+        header_text.append(f"Target Ports: {ports_desc}  •  Current Mode: {mode.upper()}", style="dim white")
+        console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
+
+        # Countries Table
+        t = Table(box=box.ROUNDED, header_style="bold cyan", border_style="cyan", expand=True)
+        t.add_column("[ # ]", justify="center", style="bold cyan", width=7, min_width=7, max_width=7, no_wrap=True)
+        t.add_column("Country / Code", style="bold white", width=22, min_width=22, max_width=22, no_wrap=True)
+        t.add_column("Policy", style="bold green" if mode=="whitelist" else "bold red", width=26, min_width=26, max_width=26, no_wrap=True)
+        t.add_column("Description / Label", style="italic yellow", ratio=1)
+
+        entries = gdata.setdefault("countries", [])
+        if not entries:
+            t.add_row("[ - ]", "No countries configured", mode_styled, "-")
+        else:
+            for idx, item in enumerate(entries, 1):
+                cc = item.get("country", "").upper()
+                cname = get_country_name(cc)
+                pol_str = "ALLOW (Whitelist)" if mode == "whitelist" else ("BLOCK (Blacklist)" if mode == "blacklist" else "INACTIVE")
+                t.add_row(f"[ {idx:2d} ]", f"{cc} ({cname})", pol_str, item.get("comment", ""))
+
+        console.print(t)
+
+        action_table = Table(box=box.SIMPLE, show_header=False, expand=True)
+        action_table.add_column("Key", style="bold cyan", width=10, justify="center")
+        action_table.add_column("Action", style="white")
+        action_table.add_row("[ M ]", f"● Change Mode (Current: {mode_styled} -> Whitelist / Blacklist / Disabled)")
+        action_table.add_row("[ A ]", "● Add Country to this Group Filter (e.g. UA, US, DE)")
+        action_table.add_row("[ D ]", "● Delete Country from this Group Filter")
+        action_table.add_row("[ B ]", "● Back to GeoIP Menu")
+        console.print(Panel(action_table, title="[bold white]● Available Actions[/]", box=box.ROUNDED, border_style="dim white"))
+
+        choice = Prompt.ask("[bold green]Choose action [M/A/D/B][/]", choices=["m", "a", "d", "b", "q", ""], default="b").strip().lower()
+
+        if choice in ["b", "q", ""]:
+            break
+        elif choice == "m":
+            new_mode = Prompt.ask("Select mode", choices=["whitelist", "blacklist", "disabled", "w", "b", "d"], default=mode).strip().lower()
+            mode_map = {"w": "whitelist", "b": "blacklist", "d": "disabled", "whitelist": "whitelist", "blacklist": "blacklist", "disabled": "disabled"}
+            gdata["mode"] = mode_map.get(new_mode, "disabled")
+            save_config(cfg)
+            apply_firewall(cfg)
+            Prompt.ask(f"[bold green]● Mode set to {gdata['mode'].upper()}! Press Enter...[/]")
+        elif choice == "a":
+            cc_in = Prompt.ask("Enter 2-letter Country Code (e.g. UA, US, DE, PL, GB)").strip().upper()
+            if len(cc_in) != 2 or not cc_in.isalpha():
+                console.print("[bold red]Invalid country code. Must be 2 letters (e.g. UA).[/]")
+                Prompt.ask("Press Enter...")
+                continue
+            cname = get_country_name(cc_in)
+            comm = Prompt.ask(f"Enter description (Country: {cname})", default=cname).strip()
+
+            console.print(f"[cyan]Fetching CIDRs for {cc_in} ({cname})...[/]")
+            fetch_country_zone(cc_in)
+            v4, v6 = get_country_cidrs(cc_in)
+            console.print(f"[green]✔ Cached {len(v4)} IPv4 CIDRs and {len(v6)} IPv6 CIDRs for {cc_in}.[/]")
+
+            found = False
+            for it in entries:
+                if it.get("country", "").upper() == cc_in:
+                    it["comment"] = comm
+                    found = True
+                    break
+            if not found:
+                entries.append({"country": cc_in, "comment": comm})
+
+            if gdata.get("mode") == "disabled":
+                if Confirm.ask("Group filter mode is currently DISABLED. Enable WHITELIST mode now?", default=True):
+                    gdata["mode"] = "whitelist"
+
+            save_config(cfg)
+            apply_firewall(cfg)
+            Prompt.ask("[bold green]● Country added and firewall updated! Press Enter...[/]")
+        elif choice == "d":
+            if not entries:
+                continue
+            idx_in = Prompt.ask(f"Enter number to delete [1-{len(entries)}]").strip()
+            if idx_in.isdigit() and 1 <= int(idx_in) <= len(entries):
+                del_item = entries.pop(int(idx_in)-1)
+                save_config(cfg)
+                apply_firewall(cfg)
+                Prompt.ask(f"[bold green]● Removed {del_item.get('country')}! Press Enter...[/]")
+
+def manage_geoip_menu_tui(cfg):
+    while True:
+        os.system("clear")
+        header_text = Text()
+        header_text.append("● GEOIP & COUNTRY-BASED ACCESS CONTROL MANAGER\n", style="bold cyan")
+        header_text.append("Configure Global Country Bans & Per-Service Country Whitelists / Blacklists", style="dim white")
+        console.print(Panel(Align.center(header_text), box=box.ROUNDED, border_style="cyan"))
+
+        menu_table = Table(box=box.ROUNDED, show_header=False, expand=True, border_style="cyan")
+        menu_table.add_column("Key", style="bold cyan", width=8, justify="center")
+        menu_table.add_column("GeoIP Category / Service", style="bold white", width=36)
+        menu_table.add_column("Scope / Details", style="dim white")
+
+        num_gbl = len(cfg.get("geoip", {}).get("global_blacklist", []))
+        menu_table.add_row("[ 1 ]", "● Global Country Blacklist", f"Unconditional drop for entire server ({num_gbl} blocked)")
+        
+        http_mode = cfg.get("geoip", {}).get("groups", {}).get("http_only", {}).get("mode", "disabled").upper()
+        menu_table.add_row("[ 2 ]", "● HTTP / HTTPS Web (80, 443)", f"Web portal country filtering (Mode: {http_mode})")
+        
+        mail_mode = cfg.get("geoip", {}).get("groups", {}).get("mail_clients", {}).get("mode", "disabled").upper()
+        menu_table.add_row("[ 3 ]", "● Mail Clients & Submission", f"POP3/IMAP/587 country filtering (Mode: {mail_mode})")
+        
+        pub_mode = cfg.get("geoip", {}).get("groups", {}).get("public_ports", {}).get("mode", "disabled").upper()
+        menu_table.add_row("[ 4 ]", "● Public World Ports (25 SMTP)", f"Port 25 SMTP country filtering (Mode: {pub_mode})")
+        
+        trust_mode = cfg.get("geoip", {}).get("groups", {}).get("trusted", {}).get("mode", "disabled").upper()
+        menu_table.add_row("[ 5 ]", "● Trusted Services (3306, 10050)", f"MariaDB & Zabbix country filtering (Mode: {trust_mode})")
+        
+        menu_table.add_row("", "", "")
+        menu_table.add_row("[ 6 ]", "● Update / Refresh GeoIP Database", "Download latest country CIDR zone files now")
+        menu_table.add_row("", "", "")
+        menu_table.add_row("[ 0 ]", "● Back to Main Menu", "Return to primary firewall management console")
+
+        console.print(Panel(menu_table, title="[bold white]● GeoIP Submenu[/]", box=box.ROUNDED, border_style="cyan"))
+
+        choice = Prompt.ask("[bold green]Choose option [0-6][/]", choices=["0", "1", "2", "3", "4", "5", "6", "q", "exit", ""]).strip()
+
+        if choice in ["0", "q", "exit", ""]:
+            break
+        elif choice == "1":
+            manage_global_blacklist_tui(cfg)
+        elif choice == "2":
+            manage_group_geoip_tui(cfg, "http_only", "HTTP / HTTPS Web Access", "80/tcp, 443/tcp")
+        elif choice == "3":
+            manage_group_geoip_tui(cfg, "mail_clients", "Mail Clients & Submission", "110, 143, 587, 993, 995/tcp")
+        elif choice == "4":
+            manage_group_geoip_tui(cfg, "public_ports", "Public Ports (World)", "25/tcp SMTP")
+        elif choice == "5":
+            manage_group_geoip_tui(cfg, "trusted", "Trusted Services", "3306/tcp, 10050/tcp")
+        elif choice == "6":
+            update_all_geoip_caches(cfg)
+            apply_firewall(cfg)
+            Prompt.ask("[bold green]● GeoIP zones refreshed and firewall reloaded! Press Enter...[/]")
+
+# ----------------- Interactive Main TUI -----------------
 def interactive_tui():
     cfg = load_config()
     while True:
@@ -739,19 +1354,21 @@ def interactive_tui():
         menu_table.add_row("[ 3 ]", "● Manage HTTP / HTTPS Web", "Access to Web Management Portal (Ports 80 & 443)")
         menu_table.add_row("[ 4 ]", "● Manage Mail Clients & Submission", "Access to POP3/IMAP/Submission (110, 143, 587, 993, 995)")
         menu_table.add_row("[ 5 ]", "● Manage Public World Ports", "Ports open to 0.0.0.0/0 (Port 25/tcp SMTP)")
+        menu_table.add_row("[ 6 ]", "● Manage GeoIP & Country ACL", "Global Blacklist & Per-Group Country Filters (WL/BL)")
         menu_table.add_row("", "", "")
-        menu_table.add_row("[ 6 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
-        menu_table.add_row("[ 7 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
+        menu_table.add_row("[ 7 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
+        menu_table.add_row("[ 8 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
+        menu_table.add_row("[ 9 ]", "● Update GeoIP Database Now", "Download latest country CIDR zone files")
         
         mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted ACL)"
         mode_color = "yellow" if cfg.get("enabled", True) else "green"
-        menu_table.add_row("[ 8 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
+        menu_table.add_row("[ 10 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
         menu_table.add_row("", "", "")
         menu_table.add_row("[ 0 ]", "● Exit to Configuration Console", "Return to main eFa-Configure menu")
 
         console.print(Panel(menu_table, title="[bold white]● Main Menu Navigation[/]", box=box.ROUNDED, border_style="cyan"))
 
-        choice = Prompt.ask("[bold green]Choose option [0-8][/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "q", "exit", ""]).strip()
+        choice = Prompt.ask("[bold green]Choose option [0-10][/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "q", "exit", ""]).strip()
 
         if choice in ["0", "q", "exit", ""]:
             break
@@ -766,13 +1383,19 @@ def interactive_tui():
         elif choice == "5":
             manage_group_tui(cfg, "public_ports", "● PUBLIC PORTS (WORLD OPEN)", "Ports open to the entire Internet (0.0.0.0/0), e.g. Port 25 SMTP", header_style="bold yellow", border_style="yellow")
         elif choice == "6":
+            manage_geoip_menu_tui(cfg)
+        elif choice == "7":
             os.system("clear")
             list_rules(cfg)
             Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
-        elif choice == "7":
+        elif choice == "8":
             apply_firewall(cfg)
             Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
-        elif choice == "8":
+        elif choice == "9":
+            update_all_geoip_caches(cfg)
+            apply_firewall(cfg)
+            Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
+        elif choice == "10":
             cfg["enabled"] = not cfg.get("enabled", True)
             save_config(cfg)
             apply_firewall(cfg)
@@ -787,7 +1410,7 @@ def main():
             print("[ERROR] eFa-Firewall must be run as root.")
         sys.exit(1)
 
-    parser = argparse.ArgumentParser(description="EFA-NG Firewall & Access Control Manager (Rich TUI Edition)")
+    parser = argparse.ArgumentParser(description="EFA-NG Firewall & Access Control Manager (Rich TUI & GeoIP Edition)")
     parser.add_argument("--apply", action="store_true", help="Generate and apply firewall rules from config")
     parser.add_argument("--status", action="store_true", help="Show current firewall status")
     parser.add_argument("--list", action="store_true", help="List all firewall rules, IPs and comments in rich table")
@@ -795,6 +1418,9 @@ def main():
     parser.add_argument("--disable", action="store_true", help="Disable firewall restriction mode (open mode)")
     parser.add_argument("--add", nargs=3, metavar=("GROUP", "IP", "COMMENT"), help="Add IP to group (admins, trusted, http_only, mail_clients)")
     parser.add_argument("--del", dest="delete", nargs=2, metavar=("GROUP", "IP"), help="Delete IP from group")
+    parser.add_argument("--geoip-block-add", nargs="+", metavar=("COUNTRY", "[COMMENT]"), help="Add country to Global Blacklist")
+    parser.add_argument("--geoip-block-del", metavar="COUNTRY", help="Delete country from Global Blacklist")
+    parser.add_argument("--update-geoip", action="store_true", help="Download/update all configured country CIDR zone files")
     parser.add_argument("--tui", action="store_true", help="Run interactive TUI console")
 
     args = parser.parse_args()
@@ -819,6 +1445,10 @@ def main():
         save_config(cfg)
         apply_firewall(cfg)
         sys.exit(0)
+    elif args.update_geoip:
+        update_all_geoip_caches(cfg)
+        apply_firewall(cfg)
+        sys.exit(0)
     elif args.add:
         group, ip, comment = args.add
         success = cli_add_entry(cfg, group, ip, comment)
@@ -827,6 +1457,29 @@ def main():
         group, ip = args.delete
         success = cli_del_entry(cfg, group, ip)
         sys.exit(0 if success else 1)
+    elif args.geoip_block_add:
+        cc = args.geoip_block_add[0].upper()
+        comm = " ".join(args.geoip_block_add[1:]) if len(args.geoip_block_add) > 1 else get_country_name(cc)
+        fetch_country_zone(cc)
+        entries = cfg.setdefault("geoip", {}).setdefault("global_blacklist", [])
+        found = False
+        for it in entries:
+            if it.get("country", "").upper() == cc:
+                it["comment"] = comm
+                found = True
+                break
+        if not found:
+            entries.append({"country": cc, "comment": comm})
+        save_config(cfg)
+        apply_firewall(cfg)
+        sys.exit(0)
+    elif args.geoip_block_del:
+        cc = args.geoip_block_del.upper()
+        entries = cfg.get("geoip", {}).get("global_blacklist", [])
+        cfg["geoip"]["global_blacklist"] = [it for it in entries if it.get("country", "").upper() != cc]
+        save_config(cfg)
+        apply_firewall(cfg)
+        sys.exit(0)
     else:
         # Default action: run interactive TUI
         interactive_tui()

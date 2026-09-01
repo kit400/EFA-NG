@@ -109,5 +109,53 @@
         "comment": "Example Office Mail Clients"
       }
     ]
+  },
+  "geoip": {
+    "enabled": true,
+    "global_blacklist": [
+      {
+        "country": "RU",
+        "comment": "Russian Federation (Global Drop)"
+      },
+      {
+        "country": "CN",
+        "comment": "China (Global Drop)"
+      },
+      {
+        "country": "BR",
+        "comment": "Brazil (Global Drop)"
+      }
+    ],
+    "groups": {
+      "http_only": {
+        "mode": "whitelist",
+        "countries": [
+          {
+            "country": "UA",
+            "comment": "Ukraine"
+          },
+          {
+            "country": "US",
+            "comment": "United States"
+          },
+          {
+            "country": "DE",
+            "comment": "Germany"
+          }
+        ]
+      },
+      "mail_clients": {
+        "mode": "disabled",
+        "countries": []
+      },
+      "public_ports": {
+        "mode": "disabled",
+        "countries": []
+      },
+      "trusted": {
+        "mode": "disabled",
+        "countries": []
+      }
+    }
   }
 }
