@@ -70,5 +70,44 @@
         "comment": "Example Corporate Web Users"
       }
     ]
+  },
+  "mail_clients": {
+    "ports": [
+      {
+        "port": "110",
+        "proto": "tcp",
+        "comment": "POP3 Mail Access"
+      },
+      {
+        "port": "143",
+        "proto": "tcp",
+        "comment": "IMAP Mail Access"
+      },
+      {
+        "port": "587",
+        "proto": "tcp",
+        "comment": "SMTP Submission"
+      },
+      {
+        "port": "993",
+        "proto": "tcp",
+        "comment": "IMAPS Secure IMAP"
+      },
+      {
+        "port": "995",
+        "proto": "tcp",
+        "comment": "POP3S Secure POP3"
+      }
+    ],
+    "entries": [
+      {
+        "ip": "10.0.0.0/8",
+        "comment": "Example Corporate Mail Clients Subnet"
+      },
+      {
+        "ip": "192.168.1.0/24",
+        "comment": "Example Office Mail Clients"
+      }
+    ]
   }
 }

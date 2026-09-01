@@ -75,6 +75,24 @@ def get_default_config():
                 {"ip": "195.230.150.225", "comment": "Remote Web User 4"},
                 {"ip": "195.230.150.69", "comment": "Dev Server Web Access"}
             ]
+        },
+        "mail_clients": {
+            "ports": [
+                {"port": "110", "proto": "tcp", "comment": "POP3 Mail Access"},
+                {"port": "143", "proto": "tcp", "comment": "IMAP Mail Access"},
+                {"port": "587", "proto": "tcp", "comment": "SMTP Submission"},
+                {"port": "993", "proto": "tcp", "comment": "IMAPS Secure IMAP"},
+                {"port": "995", "proto": "tcp", "comment": "POP3S Secure POP3"}
+            ],
+            "entries": [
+                {"ip": "195.230.150.128/27", "comment": "NOC Subnet"},
+                {"ip": "212.1.66.0/24", "comment": "Infocom Network"},
+                {"ip": "94.101.42.162", "comment": "Remote Mail Client 1"},
+                {"ip": "185.239.185.200", "comment": "Remote Mail Client 2"},
+                {"ip": "77.235.167.209", "comment": "Remote Mail Client 3"},
+                {"ip": "195.230.150.225", "comment": "Remote Mail Client 4"},
+                {"ip": "195.230.150.69", "comment": "Dev Server Mail Access"}
+            ]
         }
     }
 
@@ -82,7 +100,21 @@ def load_config():
     if os.path.exists(CONFIG_PATH):
         try:
             with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                cfg = json.load(f)
+                # Ensure mail_clients structure exists if loading older config
+                if "mail_clients" not in cfg:
+                    cfg["mail_clients"] = {
+                        "ports": [
+                            {"port": "110", "proto": "tcp", "comment": "POP3 Mail Access"},
+                            {"port": "143", "proto": "tcp", "comment": "IMAP Mail Access"},
+                            {"port": "587", "proto": "tcp", "comment": "SMTP Submission"},
+                            {"port": "993", "proto": "tcp", "comment": "IMAPS Secure IMAP"},
+                            {"port": "995", "proto": "tcp", "comment": "POP3S Secure POP3"}
+                        ],
+                        "entries": []
+                    }
+                    save_config(cfg)
+                return cfg
         except Exception as e:
             if RICH_AVAILABLE:
                 console.print(f"[bold red]ERROR:[/] Failed to parse {CONFIG_PATH}: {e}")
@@ -168,7 +200,11 @@ def apply_firewall(cfg, silent=False):
   <service name="https"/>
   <port port="80" protocol="tcp"/>
   <port port="443" protocol="tcp"/>
+  <port port="110" protocol="tcp"/>
+  <port port="143" protocol="tcp"/>
   <port port="587" protocol="tcp"/>
+  <port port="993" protocol="tcp"/>
+  <port port="995" protocol="tcp"/>
   <port port="3306" protocol="tcp"/>
   <port port="10050" protocol="tcp"/>
   <forward/>
@@ -233,6 +269,16 @@ def apply_firewall(cfg, silent=False):
         elif ver == 6:
             http_v6.add(norm)
 
+    mail_v4 = set()
+    mail_v6 = set()
+    for item in cfg.get("mail_clients", {}).get("entries", []):
+        ip = item.get("ip", "")
+        norm, ver = normalize_ip(ip)
+        if ver == 4:
+            mail_v4.add(norm)
+        elif ver == 6:
+            mail_v6.add(norm)
+
     # Write IPSet XMLs
     write_firewalld_ipset_xml("efa_admins", "EFA-NG Admins (Full Access)", admin_v4, family="inet")
     if admin_v6:
@@ -247,6 +293,11 @@ def apply_firewall(cfg, silent=False):
         write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", http_v4, family="inet")
     else:
         write_firewalld_ipset_xml("efa_http", "EFA-NG HTTP/HTTPS Access", ["127.0.0.1"], family="inet")
+
+    if mail_v4:
+        write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access (POP3, IMAP, Submission)", mail_v4, family="inet")
+    else:
+        write_firewalld_ipset_xml("efa_mail", "EFA-NG Mail Clients Access", ["127.0.0.1"], family="inet")
 
     # Generate public.xml
     pub_lines = ['<?xml version="1.0" encoding="utf-8"?>']
@@ -297,6 +348,25 @@ def apply_firewall(cfg, silent=False):
         if port_num:
             pub_lines.append('  <rule family="ipv4">')
             pub_lines.append('    <source ipset="efa_http"/>')
+            pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
+            pub_lines.append('    <accept/>')
+            pub_lines.append('  </rule>')
+
+    # Rich rules: Mail Clients Ports (110, 143, 587, 993, 995)
+    default_mail_ports = [
+        {"port": "110", "proto": "tcp"},
+        {"port": "143", "proto": "tcp"},
+        {"port": "587", "proto": "tcp"},
+        {"port": "993", "proto": "tcp"},
+        {"port": "995", "proto": "tcp"}
+    ]
+    mail_ports = cfg.get("mail_clients", {}).get("ports", default_mail_ports)
+    for mp in mail_ports:
+        port_num = str(mp.get("port", "")).strip()
+        proto = mp.get("proto", "tcp").lower()
+        if port_num:
+            pub_lines.append('  <rule family="ipv4">')
+            pub_lines.append('    <source ipset="efa_mail"/>')
             pub_lines.append(f'    <port port="{port_num}" protocol="{proto}"/>')
             pub_lines.append('    <accept/>')
             pub_lines.append('  </rule>')
@@ -360,10 +430,11 @@ def show_status(cfg):
     num_admins = len(cfg.get("admins", []))
     num_trusted = len(cfg.get("trusted", {}).get("entries", []))
     num_http = len(cfg.get("http_only", {}).get("entries", []))
+    num_mail = len(cfg.get("mail_clients", {}).get("entries", []))
     num_pub = len(cfg.get("public_ports", []))
 
     summary_table = Table(box=box.SIMPLE_HEAVY, show_header=False, expand=True)
-    summary_table.add_column("Key", style="bold cyan", width=28)
+    summary_table.add_column("Key", style="bold cyan", width=32)
     summary_table.add_column("Value", style="bold white")
 
     summary_table.add_row("●  Firewall Service", fw_badge)
@@ -371,6 +442,7 @@ def show_status(cfg):
     summary_table.add_row("●  Admins (All Ports Open)", f"[bold white]{num_admins}[/] networks / hosts")
     summary_table.add_row("●  Trusted (DB & Zabbix)", f"[bold white]{num_trusted}[/] networks (Ports: 3306, 10050)")
     summary_table.add_row("●  HTTP / HTTPS Web Access", f"[bold white]{num_http}[/] networks (Ports: 80, 443)")
+    summary_table.add_row("●  Mail Clients & Submission", f"[bold white]{num_mail}[/] networks (Ports: 110, 143, 587, 993, 995)")
     summary_table.add_row("●  Public World Access", f"[bold white]{num_pub}[/] ports (Port: 25/tcp SMTP)")
 
     console.print(Panel(summary_table, title="[bold white]● System Status Overview[/]", box=box.ROUNDED, border_style="blue"))
@@ -426,7 +498,22 @@ def list_rules(cfg):
             t_http.add_row(f"[ {idx:2d} ]", item.get("ip", ""), "80/tcp, 443/tcp", item.get("comment", ""))
     console.print(t_http)
 
-    # 4. Public Ports Table
+    # 4. Mail Clients Table
+    t_mail = Table(title="● MAIL CLIENTS & SUBMISSION (Ports 110, 143, 587, 993, 995)", box=box.ROUNDED, header_style="bold dark_cyan", border_style="dark_cyan", expand=True)
+    t_mail.add_column("[ # ]", justify="center", style="bold cyan", width=7)
+    t_mail.add_column("IP / CIDR Network", style="bold white", width=26)
+    t_mail.add_column("Allowed Ports", style="bold green", width=24)
+    t_mail.add_column("Description / Label", style="italic yellow")
+    
+    mail_entries = cfg.get("mail_clients", {}).get("entries", [])
+    if not mail_entries:
+        t_mail.add_row("[ - ]", "None configured", "-", "-")
+    else:
+        for idx, item in enumerate(mail_entries, 1):
+            t_mail.add_row(f"[ {idx:2d} ]", item.get("ip", ""), "110, 143, 587, 993, 995", item.get("comment", ""))
+    console.print(t_mail)
+
+    # 5. Public Ports Table
     t_pub = Table(title="● PUBLIC PORTS (Open to 0.0.0.0/0 World)", box=box.ROUNDED, header_style="bold yellow", border_style="yellow", expand=True)
     t_pub.add_column("[ # ]", justify="center", style="bold cyan", width=7)
     t_pub.add_column("Port / Protocol", style="bold white", width=26)
@@ -459,9 +546,11 @@ def cli_add_entry(cfg, group, ip, comment=""):
         entries = cfg.setdefault("trusted", {}).setdefault("entries", [])
     elif group in ["http", "http_only", "http-only", "web"]:
         entries = cfg.setdefault("http_only", {}).setdefault("entries", [])
+    elif group in ["mail", "mail_clients", "mail-clients", "mail_access", "mail_users", "pop", "imap", "submission"]:
+        entries = cfg.setdefault("mail_clients", {}).setdefault("entries", [])
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only")
+            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only, mail_clients")
         else:
             print(f"[ERROR] Unknown group '{group}'")
         return False
@@ -498,9 +587,11 @@ def cli_del_entry(cfg, group, ip):
         entries = cfg.get("trusted", {}).get("entries", [])
     elif group in ["http", "http_only", "http-only", "web"]:
         entries = cfg.get("http_only", {}).get("entries", [])
+    elif group in ["mail", "mail_clients", "mail-clients", "mail_access", "mail_users", "pop", "imap", "submission"]:
+        entries = cfg.get("mail_clients", {}).get("entries", [])
     else:
         if RICH_AVAILABLE:
-            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only")
+            console.print(f"[bold red]ERROR:[/] Unknown group '{group}'. Valid: admins, trusted, http_only, mail_clients")
         else:
             print(f"[ERROR] Unknown group '{group}'")
         return False
@@ -544,6 +635,8 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
             entries = cfg.setdefault("trusted", {}).setdefault("entries", [])
         elif group_name == "http_only":
             entries = cfg.setdefault("http_only", {}).setdefault("entries", [])
+        elif group_name == "mail_clients":
+            entries = cfg.setdefault("mail_clients", {}).setdefault("entries", [])
         elif group_name == "public_ports":
             entries = cfg.setdefault("public_ports", [])
 
@@ -609,7 +702,7 @@ def manage_group_tui(cfg, group_name, title, desc, header_style="bold cyan", bor
                     console.print("[bold red]Invalid IP or CIDR network format.[/]")
                     Prompt.ask("Press Enter to continue...")
                     continue
-                comm = Prompt.ask("Enter comment / description (e.g. Admin Home / NOC / Monitoring)").strip()
+                comm = Prompt.ask("Enter comment / description (e.g. Office LAN / Mail User / Client Subnet)").strip()
                 entries.append({"ip": norm, "comment": comm})
                 save_config(cfg)
                 apply_firewall(cfg)
@@ -655,26 +748,27 @@ def interactive_tui():
         # Main Navigation Menu
         menu_table = Table(box=box.ROUNDED, show_header=False, expand=True, border_style="cyan")
         menu_table.add_column("Key", style="bold cyan", width=8, justify="center")
-        menu_table.add_column("Category / Action", style="bold white", width=34)
+        menu_table.add_column("Category / Action", style="bold white", width=36)
         menu_table.add_column("Scope / Details", style="dim white")
 
         menu_table.add_row("[ 1 ]", "● Manage Admins Group", "Full access to ALL ports and protocols")
         menu_table.add_row("[ 2 ]", "● Manage Trusted Services", "Access to MariaDB (3306) and Zabbix-Agent (10050)")
         menu_table.add_row("[ 3 ]", "● Manage HTTP / HTTPS Web", "Access to Web Management Portal (Ports 80 & 443)")
-        menu_table.add_row("[ 4 ]", "● Manage Public World Ports", "Ports open to 0.0.0.0/0 (Port 25/tcp SMTP)")
+        menu_table.add_row("[ 4 ]", "● Manage Mail Clients & Submission", "Access to POP3/IMAP/Submission (110, 143, 587, 993, 995)")
+        menu_table.add_row("[ 5 ]", "● Manage Public World Ports", "Ports open to 0.0.0.0/0 (Port 25/tcp SMTP)")
         menu_table.add_row("", "", "")
-        menu_table.add_row("[ 5 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
-        menu_table.add_row("[ 6 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
+        menu_table.add_row("[ 6 ]", "● View Full Rules Table", "Detailed listing of all active ACLs and comments")
+        menu_table.add_row("[ 7 ]", "● Apply Rules & Reload Now", "Regenerate IPSet XMLs and reload FirewallD")
         
         mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted ACL)"
         mode_color = "yellow" if cfg.get("enabled", True) else "green"
-        menu_table.add_row("[ 7 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
+        menu_table.add_row("[ 8 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
         menu_table.add_row("", "", "")
         menu_table.add_row("[ 0 ]", "● Exit to Configuration Console", "Return to main eFa-Configure menu")
 
         console.print(Panel(menu_table, title="[bold white]● Main Menu Navigation[/]", box=box.ROUNDED, border_style="cyan"))
 
-        choice = Prompt.ask("[bold green]Choose option [0-7][/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "q", "exit", ""]).strip()
+        choice = Prompt.ask("[bold green]Choose option [0-8][/]", choices=["0", "1", "2", "3", "4", "5", "6", "7", "8", "q", "exit", ""]).strip()
 
         if choice in ["0", "q", "exit", ""]:
             break
@@ -685,15 +779,17 @@ def interactive_tui():
         elif choice == "3":
             manage_group_tui(cfg, "http_only", "● HTTP / HTTPS WEB ACCESS LIST", "Hosts allowed to access Web Interface on HTTP (80) and HTTPS (443)", header_style="bold green", border_style="green")
         elif choice == "4":
-            manage_group_tui(cfg, "public_ports", "● PUBLIC PORTS (WORLD OPEN)", "Ports open to the entire Internet (0.0.0.0/0), e.g. Port 25 SMTP", header_style="bold yellow", border_style="yellow")
+            manage_group_tui(cfg, "mail_clients", "● MAIL CLIENTS & SUBMISSION ACCESS LIST", "Hosts allowed to connect to POP3 (110), IMAP (143), Submission (587), IMAPS (993), POP3S (995)", header_style="bold dark_cyan", border_style="dark_cyan")
         elif choice == "5":
+            manage_group_tui(cfg, "public_ports", "● PUBLIC PORTS (WORLD OPEN)", "Ports open to the entire Internet (0.0.0.0/0), e.g. Port 25 SMTP", header_style="bold yellow", border_style="yellow")
+        elif choice == "6":
             os.system("clear")
             list_rules(cfg)
             Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
-        elif choice == "6":
+        elif choice == "7":
             apply_firewall(cfg)
             Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
-        elif choice == "7":
+        elif choice == "8":
             cfg["enabled"] = not cfg.get("enabled", True)
             save_config(cfg)
             apply_firewall(cfg)
@@ -714,7 +810,7 @@ def main():
     parser.add_argument("--list", action="store_true", help="List all firewall rules, IPs and comments in rich table")
     parser.add_argument("--enable", action="store_true", help="Enable firewall restriction mode")
     parser.add_argument("--disable", action="store_true", help="Disable firewall restriction mode (open mode)")
-    parser.add_argument("--add", nargs=3, metavar=("GROUP", "IP", "COMMENT"), help="Add IP to group (admins, trusted, http_only)")
+    parser.add_argument("--add", nargs=3, metavar=("GROUP", "IP", "COMMENT"), help="Add IP to group (admins, trusted, http_only, mail_clients)")
     parser.add_argument("--del", dest="delete", nargs=2, metavar=("GROUP", "IP"), help="Delete IP from group")
     parser.add_argument("--tui", action="store_true", help="Run interactive TUI console")
 
