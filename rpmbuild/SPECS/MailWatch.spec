@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       8.eFa%{?dist}
+Release:       9.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -137,9 +137,13 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
-* Wed Sep 09 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-6
-- Add Top Countries and Top TLDs (1st Level Domains) reports in reports.php
-- Optimize GeoIP Reader caching for high-speed multi-IP resolution
+* Wed Sep 09 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-9
+- Add CSV export functionality to all report tables under charts (TLD, Countries, Total Mail, etc.)
+- Add tableExport.js utility with UTF-8 BOM support and auto-alignment
+
+* Wed Sep 09 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-8
+- Fix missing translation keys and allow fallback values in __()
+
 
 * Thu Aug 27 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.4-1
 - Release MailWatch-NG 6.0.4 for EL10 / CentOS Stream 10
