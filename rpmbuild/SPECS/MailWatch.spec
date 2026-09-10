@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       9.eFa%{?dist}
+Release:       10.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -137,6 +137,13 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-10
+- Fix MW-01 (P1): Sanitize HTML email rendering using HTMLPurifier allowlist engine
+- Isolate email viewer iframe with sandbox="allow-same-origin allow-popups"
+- Add strict Content-Security-Policy and X-Content-Type-Options headers to viewpart.php
+- Sanitize attachment filenames against CRLF injection and path traversal
+- Neutralize active content and force attachment disposition for downloaded parts
+
 * Wed Sep 09 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-9
 - Add CSV export functionality to all report tables under charts (TLD, Countries, Total Mail, etc.)
 - Add tableExport.js utility with UTF-8 BOM support and auto-alignment
