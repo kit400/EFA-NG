@@ -136,7 +136,7 @@ function func_system-restore() {
                           DOMAINNAME="`grep DOMAINNAME /etc/eFa/eFa-Config | sed 's/.*://'`"
 
                           # Restore importable configurations
-                          /bin/cp -f /var/eFa/backup/backup/etc/mail/spamassassin/local.cf /etc/mail/spamassassin/local.cf
+                          /bin/cp -rf /var/eFa/backup/backup/etc/mail/spamassassin/*.cf /etc/mail/spamassassin/ 2>/dev/null || true
                           /bin/cp -rf /var/eFa/backup/backup/etc/postfix/* /etc/postfix
                           /bin/cp -rf /var/eFa/backup/backup/etc/opendkim/* /etc/opendkim
                           /bin/cp -f /var/eFa/backup/backup/etc/opendmarc.conf /etc

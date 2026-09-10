@@ -135,28 +135,85 @@ function audit_postfix($srcPostconfFile) {
 }
 
 // -----------------------------------------------------------------------------
-// 4. SpamAssassin local.cf
+// 4. SpamAssassin local.cf and Custom Rules (*.cf)
 // -----------------------------------------------------------------------------
-function audit_spamassassin($srcFile) {
-    $targetFile = '/etc/mail/spamassassin/local.cf';
-    $srcLines = file_exists($srcFile) ? file($srcFile, FILE_IGNORE_NEW_LINES) : [];
-    $tgtContent = file_exists($targetFile) ? file_get_contents($targetFile) : '';
-
+function audit_spamassassin($src) {
     $diffs = [];
-    foreach ($srcLines as $line) {
-        $t = trim($line);
-        if ($t === '' || $t[0] === '#') continue;
-        if (strpos($tgtContent, $t) === false) {
-            $parts = preg_split('/\s+/', $t, 2);
-            $key = $parts[0] ?? $t;
-            $val = $parts[1] ?? '';
-            $diffs[] = [
-                'key' => $key . ($val !== '' ? ' ' . $val : ''),
-                'src' => $t,
-                'def' => '(not present)'
-            ];
+    $cfFiles = [];
+
+    if (is_file($src)) {
+        $cfFiles = [$src];
+    } elseif (is_dir($src)) {
+        $saDir = is_dir("$src/spamassassin") ? "$src/spamassassin" : $src;
+        $cfFiles = glob("$saDir/*.cf") ?: [];
+    }
+
+    $targetDir = '/etc/mail/spamassassin';
+
+    foreach ($cfFiles as $srcFile) {
+        $baseName = basename($srcFile);
+        if ($baseName === 'mailscanner.cf') continue; // Symlink / managed config
+
+        $targetFile = "$targetDir/$baseName";
+
+        if ($baseName === 'local.cf') {
+            $srcLines = file_exists($srcFile) ? file($srcFile, FILE_IGNORE_NEW_LINES) : [];
+            $tgtContent = file_exists($targetFile) ? file_get_contents($targetFile) : '';
+
+            foreach ($srcLines as $line) {
+                $t = trim($line);
+                if ($t === '' || $t[0] === '#') continue;
+                if (strpos($tgtContent, $t) === false) {
+                    $parts = preg_split('/\s+/', $t, 2);
+                    $key = $parts[0] ?? $t;
+                    $val = $parts[1] ?? '';
+                    $diffs[] = [
+                        'key' => "local.cf: " . $key . ($val !== '' ? ' ' . $val : ''),
+                        'src' => $t,
+                        'def' => '(not present in default)',
+                        'file' => 'local.cf',
+                        'type' => 'directive',
+                        'raw' => $t
+                    ];
+                }
+            }
+        } else {
+            // Dedicated custom rules file (e.g. local_tld_rules.cf, custom_rules.cf)
+            $srcLines = file_exists($srcFile) ? file($srcFile, FILE_IGNORE_NEW_LINES) : [];
+            $activeRules = array_filter($srcLines, function($l) {
+                $t = trim($l);
+                return $t !== '' && $t[0] !== '#';
+            });
+            $ruleCount = count($activeRules);
+
+            if (!file_exists($targetFile)) {
+                $diffs[] = [
+                    'key' => "$baseName (custom rule file)",
+                    'src' => "$ruleCount active rules/lines",
+                    'def' => '(not present on target)',
+                    'file' => $baseName,
+                    'type' => 'custom_file',
+                    'src_path' => $srcFile,
+                    'target_path' => $targetFile
+                ];
+            } else {
+                $srcMd5 = md5_file($srcFile);
+                $tgtMd5 = md5_file($targetFile);
+                if ($srcMd5 !== $tgtMd5) {
+                    $diffs[] = [
+                        'key' => "$baseName (custom rule file)",
+                        'src' => "$ruleCount active rules/lines",
+                        'def' => '(differs from target)',
+                        'file' => $baseName,
+                        'type' => 'custom_file',
+                        'src_path' => $srcFile,
+                        'target_path' => $targetFile
+                    ];
+                }
+            }
         }
     }
+
     return $diffs;
 }
 
@@ -339,7 +396,7 @@ function get_all_diffs($baseDir) {
         'conf_php' => audit_conf_php("$dir/conf.php"),
         'mailscanner' => audit_mailscanner("$dir/MailScanner.conf"),
         'postfix' => audit_postfix("$dir/postfix_postconf_n.txt"),
-        'spamassassin' => audit_spamassassin("$dir/local.cf"),
+        'spamassassin' => audit_spamassassin($dir),
         'attachment_rules' => audit_attachment_rules($dir),
         'policy_rules' => audit_policy_rules($dir),
         'postfix_tables' => audit_postfix_tables($dir)
@@ -373,7 +430,7 @@ function review_type_menu($type, $srcDir) {
         'conf_php' => 'conf.php (MailWatch GUI Settings)',
         'mailscanner' => 'MailScanner.conf (Filter Engine Directives)',
         'postfix' => 'main.cf (Postfix Mail Transport Parameters)',
-        'spamassassin' => 'local.cf (SpamAssassin Custom Rules & Scores)',
+        'spamassassin' => 'SpamAssassin Rules (local.cf & custom *.cf)',
         'attachment_rules' => 'filename.rules.conf & Attachment Rules',
         'policy_rules' => 'spam.whitelist.rules & Policy Rules',
         'postfix_tables' => 'Postfix Routing & Transport Tables'
@@ -552,25 +609,58 @@ switch ($action) {
             }
         }
 
-        // 4. SpamAssassin local.cf
+        // 4. SpamAssassin local.cf and custom *.cf rules
         $selSaFile = "$srcDir/selected_spamassassin.json";
-        if (file_exists($selSaFile) && file_exists("$resolvedDir/local.cf") && file_exists('/etc/mail/spamassassin/local.cf')) {
+        if (file_exists($selSaFile)) {
             $keys = json_decode(file_get_contents($selSaFile), true) ?: [];
             if (!empty($keys)) {
-                $srcLines = file("$resolvedDir/local.cf", FILE_IGNORE_NEW_LINES);
-                $tgtContent = file_get_contents('/etc/mail/spamassassin/local.cf');
+                $allSa = audit_spamassassin($resolvedDir);
+                $tgtLocal = '/etc/mail/spamassassin/local.cf';
+                $tgtContent = file_exists($tgtLocal) ? file_get_contents($tgtLocal) : '';
+                $localLinesToAdd = [];
+                $customFilesInstalled = 0;
 
-                foreach ($keys as $k) {
-                    foreach ($srcLines as $line) {
-                        $t = trim($line);
-                        if ($t === '' || $t[0] === '#') continue;
-                        if (strpos($t, $k) === 0 && strpos($tgtContent, $t) === false) {
-                            $tgtContent .= "\n" . $t . "\n";
+                foreach ($allSa as $item) {
+                    $type = $item['type'] ?? '';
+                    $matched = in_array($item['key'], $keys, true)
+                        || in_array($item['file'] ?? '', $keys, true)
+                        || in_array($item['raw'] ?? '', $keys, true)
+                        || in_array($item['src'] ?? '', $keys, true);
+                    if (!$matched) continue;
+
+                    if ($type === 'custom_file') {
+                        $srcP = $item['src_path'] ?? '';
+                        $tgtP = $item['target_path'] ?? '';
+                        if (file_exists($srcP) && !empty($tgtP)) {
+                            copy($srcP, $tgtP);
+                            chown($tgtP, 'root');
+                            chgrp($tgtP, 'root');
+                            chmod($tgtP, 0644);
+                            $customFilesInstalled++;
+                            echo " - SpamAssassin: installed custom rule file " . basename($tgtP) . "\n";
+                        }
+                    } elseif ($type === 'directive') {
+                        $raw = $item['raw'] ?? $item['src'];
+                        if (strpos($tgtContent, $raw) === false) {
+                            $localLinesToAdd[] = $raw;
                         }
                     }
                 }
-                file_put_contents('/etc/mail/spamassassin/local.cf', $tgtContent);
-                echo " - SpamAssassin: merged " . count($keys) . " custom rules.\n";
+
+                if (!empty($localLinesToAdd) && file_exists($tgtLocal)) {
+                    $tgtContent = rtrim($tgtContent) . "\n\n# --- Migrated Custom Rules from Source EFA ---\n"
+                        . implode("\n", $localLinesToAdd) . "\n# --- End Migrated Custom Rules ---\n";
+                    file_put_contents($tgtLocal, $tgtContent);
+                    chown($tgtLocal, 'root');
+                    chmod($tgtLocal, 0644);
+                    echo " - SpamAssassin local.cf: merged " . count($localLinesToAdd) . " directives/scores.\n";
+                }
+
+                // Check SpamAssassin syntax lint
+                $lint = shell_exec("spamassassin --lint 2>&1");
+                if ($lint && stripos($lint, 'error') !== false) {
+                    echo " - Warning: SpamAssassin lint reported potential syntax issues:\n" . trim($lint) . "\n";
+                }
             }
         }
 

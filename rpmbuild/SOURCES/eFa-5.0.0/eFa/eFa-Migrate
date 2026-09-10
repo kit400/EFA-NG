@@ -325,7 +325,7 @@ inspect_source_system() {
         -C /var/www/html/mailscanner conf.php \
         -C /etc/MailScanner MailScanner.conf filename.rules.conf filetype.rules.conf archives.filename.rules.conf archives.filetype.rules.conf \
         -C /etc/MailScanner rules/ \
-        -C /etc/mail/spamassassin local.cf \
+        -C /etc/mail/spamassassin \$(cd /etc/mail/spamassassin 2>/dev/null && ls *.cf 2>/dev/null | grep -v '^mailscanner\.cf$' || echo local.cf) \
         -C /etc/postfix transport recipient_access sender_access helo_access relay_domains sasl_passwd 2>/dev/null" \
         | tar -xzf - -C "$SRC_CONFIGS_DIR/extracted" 2>/dev/null || true
 
@@ -417,7 +417,7 @@ audit_and_select_configurations() {
         printf " ${cyan}│${clean}  1) %-35s : %-28s ${cyan}│${clean}\n" "conf.php (MailWatch GUI)" "$c_conf custom settings"
         printf " ${cyan}│${clean}  2) %-35s : %-28s ${cyan}│${clean}\n" "MailScanner.conf (Filters)" "$c_ms customized directives"
         printf " ${cyan}│${clean}  3) %-35s : %-28s ${cyan}│${clean}\n" "main.cf (Postfix MTA)" "$c_pf non-default parameters"
-        printf " ${cyan}│${clean}  4) %-35s : %-28s ${cyan}│${clean}\n" "local.cf (SpamAssassin)" "$c_sa custom rules / scores"
+        printf " ${cyan}│${clean}  4) %-35s : %-28s ${cyan}│${clean}\n" "SpamAssassin Rules (*.cf)" "$c_sa custom rules / files"
         printf " ${cyan}│${clean}  5) %-35s : %-28s ${cyan}│${clean}\n" "Attachment Rules (filename/filetype)" "$c_ar custom rules found"
         printf " ${cyan}│${clean}  6) %-35s : %-28s ${cyan}│${clean}\n" "Policy Rules (White/Blacklists)" "$c_pr custom entries found"
         printf " ${cyan}│${clean}  7) %-35s : %-28s ${cyan}│${clean}\n" "Postfix Tables (transport/relays)" "$c_pt custom records found"
@@ -451,32 +451,29 @@ audit_and_select_configurations() {
                 break
                 ;;
             *)
-                echo -e "${red}Invalid option.${clean}"
+                echo -e " ${red}Invalid selection.${clean}"
                 sleep 1
                 ;;
         esac
     done
 }
 
+# -----------------------------------------------------------------------------
+# Step 3 Submenu: Interactive Parameter Review
+# -----------------------------------------------------------------------------
 interactive_config_review_menu() {
-    local c_conf="$1"
-    local c_ms="$2"
-    local c_pf="$3"
-    local c_sa="$4"
-    local c_ar="$5"
-    local c_pr="$6"
-    local c_pt="$7"
+    local c_conf="$1" c_ms="$2" c_pf="$3" c_sa="$4" c_ar="$5" c_pr="$6" c_pt="$7"
 
     while true; do
         echo_header
-        echo -e " ${bold}Review & Select Configuration Files${clean}"
+        echo -e " ${bold}Step 3: Interactive Configuration Parameter Review${clean}"
         echo -e " ──────────────────────────────────────────────────────────────────"
-        echo -e " Select a file to inspect and toggle individual parameters:"
+        echo -e " Choose a component to review and toggle individual settings:"
         echo ""
         echo -e "  1) conf.php         ($c_conf custom settings)"
         echo -e "  2) MailScanner.conf ($c_ms customized directives)"
         echo -e "  3) main.cf          ($c_pf non-default Postfix parameters)"
-        echo -e "  4) local.cf         ($c_sa SpamAssassin custom rules)"
+        echo -e "  4) SpamAssassin     ($c_sa rules & custom *.cf files)"
         echo -e "  5) Attachment Rules ($c_ar filename.rules.conf & filetype)"
         echo -e "  6) Policy Rules     ($c_pr spam.whitelist & policy rules)"
         echo -e "  7) Postfix Tables   ($c_pt transport & access maps)"
@@ -590,7 +587,7 @@ configure_selective_components() {
 
         echo -e "  1) $mark_cfg Core Configs     (Postfix, MailScanner, DKIM/DMARC, TLS certs)"
         echo -e "  2) $mark_usr Users & Lists    (MailWatch web accounts, allowlists, blocklists)"
-        echo -e "  3) $mark_sa SpamAssassin     (sa_bayes DB, tokens, local.cf, custom rules)"
+        echo -e "  3) $mark_sa SpamAssassin     (sa_bayes DB & tokens, local.cf rules)"
         echo -e "  4) $mark_quar Quarantine       (Quarantine spool files & database records)"
         echo -e "  5) $mark_hist Message History  (maillog & mtalog - range: ${bold}$MIG_HISTORY_RANGE${clean})"
         echo -e "  6) $mark_grey Greylisting      (sqlgrey database & whitelists)"
@@ -723,6 +720,18 @@ execute_migration() {
         echo -e "       ${yellow}●${clean} Syncing SSL/TLS certificates..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/letsencrypt/" /etc/letsencrypt/ 2>/dev/null || true
 
+        # Sync custom SpamAssassin rules (*.cf, e.g. local_tld_rules.cf)
+        echo -e "       ${yellow}●${clean} Syncing custom SpamAssassin rules (*.cf)..."
+        rsync -a -e "ssh -p $SRC_PORT" \
+            --include="*/" \
+            --include="*.cf" \
+            --exclude="mailscanner.cf" \
+            --exclude="local.cf" \
+            --exclude="*" \
+            "$SRC_USER@$SRC_HOST:/etc/mail/spamassassin/" /etc/mail/spamassassin/ 2>/dev/null || true
+        chown root:root /etc/mail/spamassassin/*.cf 2>/dev/null || true
+        chmod 0644 /etc/mail/spamassassin/*.cf 2>/dev/null || true
+
         # Apply specific audited parameter merges (conf.php, MailScanner.conf, Postfix main.cf, local.cf, rules)
         echo -e "       ${yellow}●${clean} Applying selected custom parameter merges..."
         php "$AUDIT_SCRIPT" apply "$SRC_CONFIGS_DIR" 2>/dev/null || true
@@ -784,7 +793,17 @@ execute_migration() {
         # Transfer SpamAssassin custom configs
         echo -e "       ${yellow}●${clean} Syncing /etc/mail/spamassassin rules and local.cf..."
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/mail/spamassassin/" /etc/mail/spamassassin/ \
-            --exclude="sa-update-keys" 2>/dev/null || true
+            --exclude="*.pre" \
+            --exclude="sa-update-keys*" \
+            --exclude="mailscanner.cf" \
+            --exclude="spamassassin-default.rc" \
+            --exclude="spamassassin-spamc.rc" \
+            --exclude="spamassassin-helper.sh" 2>/dev/null || true
+        chown root:root /etc/mail/spamassassin/*.cf 2>/dev/null || true
+        chmod 0644 /etc/mail/spamassassin/*.cf 2>/dev/null || true
+
+        # Verify SpamAssassin rule syntax
+        spamassassin --lint >/dev/null 2>&1 || true
 
         echo -e "       ${green}✔ SpamAssassin database and rules migrated.${clean}"
     fi
@@ -926,7 +945,7 @@ Options:
   --no-config-merge              Skip merging custom parameters from source configs (keep target defaults)
   --no-config                    Skip Postfix, MailScanner, DKIM/DMARC and SSL certs
   --no-users                     Skip MailWatch users, preferences, and allow/blocklists
-  --no-bayes                     Skip SpamAssassin Bayes database and custom rules
+  --no-bayes                     Skip SpamAssassin Bayes database and tokens
   --no-quarantine                Skip quarantine spool files and database records
   --no-history                   Skip message history (maillog, mtalog)
   --no-grey                      Skip SQLGrey greylisting database
