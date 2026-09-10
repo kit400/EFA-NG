@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       12.eFa%{?dist}
+Release:       13.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -137,6 +137,13 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-13
+- Fix MW-04 (P1): Decouple session timeout and privilege change checks from HTML rendering
+- Introduce centralized SessionGuard for unified session authentication, expiry, revocation, and role enforcement
+- Enforce session checks in login.function.php across all entry points before any output or side effects occur
+- Return HTTP 401 Unauthorized for unauthenticated or expired AJAX, JSON, and non-HTML requests
+- Add automated regression test suite for MW-04 verifying session lifecycle, privilege consistency, and endpoint responses
+
 * Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-12
 - Fix MW-03 (P1): Escape SQL LIKE pattern wildcards in address access filters
 - Escape '_' and '%' characters in user and domain addresses with ESCAPE '='
