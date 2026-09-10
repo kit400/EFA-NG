@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       10.eFa%{?dist}
+Release:       11.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -137,6 +137,13 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-11
+- Fix MW-02 (P1): Enforce server-side MessagePolicy for quarantine operations
+- Restrict dangerous content viewing and releasing based on user role and configuration
+- Strictly prohibit regular users from redirecting quarantined messages to alternate recipients
+- Enforce MessagePolicy in quarantine_release, quarantine_learn, quarantine_delete, and viewmail/viewpart
+- Log security violation audit events when policy checks fail
+
 * Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-10
 - Fix MW-01 (P1): Sanitize HTML email rendering using HTMLPurifier allowlist engine
 - Isolate email viewer iframe with sandbox="allow-same-origin allow-popups"
