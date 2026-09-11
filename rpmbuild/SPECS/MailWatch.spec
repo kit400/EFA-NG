@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       14.eFa%{?dist}
+Release:       15.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -163,6 +163,14 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-15
+- Fix MW-08 (P2): Batch database cleanup stops after first DELETE due to invalid affected_rows inspection on boolean result
+- Separate database query (dbquery) and execution (dbexecute) interfaces returning affected_rows
+- Immediately read affected_rows from dbconn connection after DELETE statements
+- Handle database errors gracefully without infinite loops or uncaught exceptions
+- Add execution budget controls (DB_CLEAN_MAX_EXECUTION_TIME, DB_CLEAN_MAX_BATCHES, DB_CLEAN_SLEEP_MS)
+- Add automated regression test suite for MW-08
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-14
 - Fix MW-05 (P1): Isolate private HTML cache outside document root and enforce web server denial
 - Relocate dashboard widget cache and DNS cache from temp/ to /var/cache/mailwatch
