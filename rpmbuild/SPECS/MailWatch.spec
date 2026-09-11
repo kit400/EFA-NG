@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       16.eFa%{?dist}
+Release:       17.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -67,7 +67,10 @@ mkdir -p %{buildroot}/%{_bindir}/mailwatch
 cp -a tools %{buildroot}%{_bindir}/mailwatch
 cp upgrade.php %{buildroot}/%{_bindir}/mailwatch/tools
 [ -f mailscanner/tools/update_geoip.php ] && cp mailscanner/tools/update_geoip.php %{buildroot}/%{_bindir}/mailwatch/tools/
+chmod 0755 %{buildroot}%{_bindir}/mailwatch/tools/mailwatch_replay_failed_events.php 2>/dev/null || true
 rm -f %{buildroot}%{_bindir}/mailwatch/tools/Cron_jobs/INSTALL
+
+mkdir -p %{buildroot}%{_localstatedir}/spool/mailwatch/failed_events
 
 mkdir -p %{buildroot}%{_sysconfdir}/cron.daily
 install -m 0755 cron/mailwatch.cron.daily %{buildroot}%{_sysconfdir}/cron.daily/mailwatch
@@ -114,6 +117,13 @@ chmod 0770 %{_localstatedir}/cache/mailwatch %{_localstatedir}/cache/mailwatch/d
 semanage fcontext -a -t httpd_cache_t "%{_localstatedir}/cache/mailwatch(/.*)?" 2>/dev/null || true
 restorecon -R %{_localstatedir}/cache/mailwatch 2>/dev/null || true
 
+# Set permissions and SELinux context for failed events spool directory (MW-10)
+mkdir -p %{_localstatedir}/spool/mailwatch/failed_events 2>/dev/null || true
+chown -R postfix:mtagroup %{_localstatedir}/spool/mailwatch 2>/dev/null || true
+chmod 0775 %{_localstatedir}/spool/mailwatch %{_localstatedir}/spool/mailwatch/failed_events 2>/dev/null || true
+semanage fcontext -a -t mscan_spool_t "%{_localstatedir}/spool/mailwatch(/.*)?" 2>/dev/null || true
+restorecon -R %{_localstatedir}/spool/mailwatch 2>/dev/null || true
+
 # Clean up legacy cache files from document root
 rm -rf %{_localstatedir}/www/html/mailscanner/temp/dash_cache 2>/dev/null || true
 rm -f %{_localstatedir}/www/html/mailscanner/temp/dash_dns_cache.json 2>/dev/null || true
@@ -155,14 +165,24 @@ fi
 %{_bindir}/mailwatch/tools/MailScanner_config/*
 %attr(0755, root, root) %{_bindir}/mailwatch/tools/upgrade.php
 %attr(0755, root, root) %{_bindir}/mailwatch/tools/update_geoip.php
+%attr(0755, root, root) %{_bindir}/mailwatch/tools/mailwatch_replay_failed_events.php
 %config(noreplace) %{_sysconfdir}/httpd/conf.d/mailwatch.conf
 %dir %attr(0770, apache, apache) %{_localstatedir}/cache/mailwatch
 %dir %attr(0770, apache, apache) %{_localstatedir}/cache/mailwatch/dash_cache
+%dir %attr(0775, postfix, mtagroup) %{_localstatedir}/spool/mailwatch
+%dir %attr(0775, postfix, mtagroup) %{_localstatedir}/spool/mailwatch/failed_events
 %config(noreplace) %{_localstatedir}/www/html/mailscanner/conf.php
 %{_localstatedir}/www/html/favicon.ico
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-17
+- Fix MW-10 (P2): Permanent database error on a single event can block SQL logger child indefinitely
+- Classify database errors into transient vs permanent with bounded retries and exponential backoff
+- Sanitize 4-byte UTF-8 sequences and divert unrecoverable errors to dead-letter queue (/var/spool/mailwatch/failed_events)
+- Add failed events replay CLI tool (tools/mailwatch_replay_failed_events.php)
+- Migrate create.sql and user_dashboards schema definitions to native utf8mb4 and utf8mb4_unicode_ci
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-16
 - Fix MW-09 (P2): mtalog cleanup infinite loop on NULL msg_id and unintended deletion of fresh records
 - Introduce cleanMtalogWithIds selecting and deleting by primary key mtalog_id with strict timestamp boundary
