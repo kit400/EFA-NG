@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       13.eFa%{?dist}
+Release:       14.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -87,6 +87,13 @@ cp -a mailscanner %{buildroot}%{_localstatedir}/www/html/mailscanner
 mv %{buildroot}%{_localstatedir}/www/html/mailscanner/conf.php.example %{buildroot}%{_localstatedir}/www/html/mailscanner/conf.php
 rm -rf %{buildroot}%{_localstatedir}/www/html/mailscanner/docs
 
+# Install Apache security configuration
+mkdir -p %{buildroot}%{_sysconfdir}/httpd/conf.d
+install -m 0644 conf/mailwatch.conf %{buildroot}%{_sysconfdir}/httpd/conf.d/mailwatch.conf
+
+# Create runtime cache directories outside document root
+mkdir -p %{buildroot}%{_localstatedir}/cache/mailwatch/dash_cache
+
 # Copy favicon to document root
 cp -f %{buildroot}%{_localstatedir}/www/html/mailscanner/favicon.ico %{buildroot}%{_localstatedir}/www/html/favicon.ico
 
@@ -99,6 +106,22 @@ chgrp apache %{_localstatedir}/www/html/mailscanner/images 2>/dev/null || true
 chgrp apache %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
 chmod 0775 %{_localstatedir}/www/html/mailscanner/images 2>/dev/null || true
 chmod 0775 %{_localstatedir}/www/html/mailscanner/temp 2>/dev/null || true
+
+# Set permissions and SELinux context for cache directory outside document root (MW-05)
+mkdir -p %{_localstatedir}/cache/mailwatch/dash_cache 2>/dev/null || true
+chown -R apache:apache %{_localstatedir}/cache/mailwatch 2>/dev/null || true
+chmod 0770 %{_localstatedir}/cache/mailwatch %{_localstatedir}/cache/mailwatch/dash_cache 2>/dev/null || true
+semanage fcontext -a -t httpd_cache_t "%{_localstatedir}/cache/mailwatch(/.*)?" 2>/dev/null || true
+restorecon -R %{_localstatedir}/cache/mailwatch 2>/dev/null || true
+
+# Clean up legacy cache files from document root
+rm -rf %{_localstatedir}/www/html/mailscanner/temp/dash_cache 2>/dev/null || true
+rm -f %{_localstatedir}/www/html/mailscanner/temp/dash_dns_cache.json 2>/dev/null || true
+rm -f %{_localstatedir}/www/html/mailscanner/temp/version_check_cache.json 2>/dev/null || true
+
+# Reload web server and php-fpm to apply configuration
+systemctl reload httpd 2>/dev/null || true
+systemctl reload php-fpm 2>/dev/null || true
 
 # Check and initialize GeoIP database if missing or outdated (< 10MB)
 if [ ! -f %{_localstatedir}/www/html/mailscanner/temp/ip-geo.mmdb ] || [ $(stat -c%s %{_localstatedir}/www/html/mailscanner/temp/ip-geo.mmdb 2>/dev/null || echo 0) -lt 10000000 ]; then
@@ -132,11 +155,23 @@ fi
 %{_bindir}/mailwatch/tools/MailScanner_config/*
 %attr(0755, root, root) %{_bindir}/mailwatch/tools/upgrade.php
 %attr(0755, root, root) %{_bindir}/mailwatch/tools/update_geoip.php
+%config(noreplace) %{_sysconfdir}/httpd/conf.d/mailwatch.conf
+%dir %attr(0770, apache, apache) %{_localstatedir}/cache/mailwatch
+%dir %attr(0770, apache, apache) %{_localstatedir}/cache/mailwatch/dash_cache
 %config(noreplace) %{_localstatedir}/www/html/mailscanner/conf.php
 %{_localstatedir}/www/html/favicon.ico
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-14
+- Fix MW-05 (P1): Isolate private HTML cache outside document root and enforce web server denial
+- Relocate dashboard widget cache and DNS cache from temp/ to /var/cache/mailwatch
+- Install Apache mailwatch.conf denying direct HTTP access to temp/, lib/, and tools/ directories
+- Add temp/.htaccess and index.php fallback returning 403 Forbidden
+- Add active TTL purge and immediate user-specific cache invalidation on logout
+- Add daily cron cache purge retention policy for files older than 1 day
+- Add automated regression test suite for MW-05
+
 * Thu Sep 10 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-13
 - Fix MW-04 (P1): Decouple session timeout and privilege change checks from HTML rendering
 - Introduce centralized SessionGuard for unified session authentication, expiry, revocation, and role enforcement
