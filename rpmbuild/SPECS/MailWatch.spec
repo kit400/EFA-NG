@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       18.eFa%{?dist}
+Release:       19.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,16 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-19
+- Fix MW-11 (P2): Eliminate metric double-counting, establish mutually exclusive classification, and normalize recipients
+- Introduce MailWatchMetrics class in functions.php with centralized SQL fragments and classification methods
+- Use boolean OR (isspam > 0 OR ishighspam > 0) to avoid double counting high spam in traffic and relays
+- Implement mutually exclusive security classification hierarchy (Virus > Bad Content > High Spam > Normal Spam > MCP > Clean) ensuring category sums strictly equal total message count
+- Refactor dashboard widgets (KPI summary, threat donut, traffic chart, top relays, recent threats, spam rules top, quarantine stats) to use MailWatchMetrics
+- Normalize comma-separated recipient lists in Top Senders/Recipients widget ensuring individual address rankings and threats <= count
+- Refactor printTodayStatistics, rep_total_mail_by_date, filter.inc.php, rep_previous_day, rep_top_countries, rep_top_mail_relays, and rep_top_tlds to use centralized metrics
+- Add comprehensive regression test suite tests/MW11RegressionTest.php covering partitions, boolean triggers, counter inflation resistance, and reports consistency
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-18
 - Fix MW-10: Support message envelope format and dual reports key in failed events replay utility
 
