@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       17.eFa%{?dist}
+Release:       18.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,9 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-18
+- Fix MW-10: Support message envelope format and dual reports key in failed events replay utility
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-17
 - Fix MW-10 (P2): Permanent database error on a single event can block SQL logger child indefinitely
 - Classify database errors into transient vs permanent with bounded retries and exponential backoff
