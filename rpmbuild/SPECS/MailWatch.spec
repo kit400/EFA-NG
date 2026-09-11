@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       19.eFa%{?dist}
+Release:       20.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,15 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-20
+- Fix MW-13 (P2): Set MYSQLI_INIT_COMMAND before real_connect and apply sql_mode explicitly
+- Use mysqli_init() and set connection options prior to real_connect()
+- Explicitly execute SET sql_mode to guarantee removal of ONLY_FULL_GROUP_BY on active session
+- Improve sql_mode replacement expression to clean start, middle, and end commas cleanly
+- Set driver report mode to MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT
+- Add database::getSessionSqlMode() helper method
+- Add comprehensive regression test suite tests/MW13RegressionTest.php
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-19
 - Fix MW-11 (P2): Eliminate metric double-counting, establish mutually exclusive classification, and normalize recipients
 - Introduce MailWatchMetrics class in functions.php with centralized SQL fragments and classification methods
