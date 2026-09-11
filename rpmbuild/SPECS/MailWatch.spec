@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       15.eFa%{?dist}
+Release:       16.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -163,6 +163,12 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-16
+- Fix MW-09 (P2): mtalog cleanup infinite loop on NULL msg_id and unintended deletion of fresh records
+- Introduce cleanMtalogWithIds selecting and deleting by primary key mtalog_id with strict timestamp boundary
+- Safely handle NULL msg_id values without infinite looping; preserve active mtalog_ids mappings when msg_id is still referenced
+- Add iteration progress check breaking on zero progress, and add comprehensive MW-09 regression tests
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-15
 - Fix MW-08 (P2): Batch database cleanup stops after first DELETE due to invalid affected_rows inspection on boolean result
 - Separate database query (dbquery) and execution (dbexecute) interfaces returning affected_rows
