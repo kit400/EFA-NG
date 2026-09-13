@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       20.eFa%{?dist}
+Release:       21.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,16 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Sat Sep 12 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-21
+- Fix MW-14 (P2): Separate raw username, LDAP filter escaping, and DN bind identity
+- Apply RFC 4515 LDAP_ESCAPE_FILTER when constructing LDAP search filter
+- Prevent alteration of search semantics and LDAP filter injection
+- Preserve unescaped raw username for error logs (trigger_error)
+- Distinctly separate search filter string, raw username, and DN bind identity ($result[0]['dn'])
+- Add helper functions ldap_escape_filter, ldap_escape_dn, and ldap_build_filter
+- Update tools/LDAP/ldaptest.php to use ldap_build_filter and fallback to entry DN
+- Add comprehensive regression test suite tests/MW14RegressionTest.php
+
 * Fri Sep 11 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-20
 - Fix MW-13 (P2): Set MYSQLI_INIT_COMMAND before real_connect and apply sql_mode explicitly
 - Use mysqli_init() and set connection options prior to real_connect()
