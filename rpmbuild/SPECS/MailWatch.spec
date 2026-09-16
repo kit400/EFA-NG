@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       21.eFa%{?dist}
+Release:       22.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,14 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Wed Sep 16 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-22
+- Fix MW-15 (P2): Enable automated CI workflows (PHPUnit, PHPStan, Format) for main branch
+- Move HTMLPurifier_URIScheme_cid to top level in functions.php for clean PHPStan symbol discovery
+- Avoid evaluating deprecated E_STRICT on PHP 8.4+ and guard get_magic_quotes_gpc on PHP 7.4
+- Check function_exists('mysqli_report') in dbquery()
+- Expand PHPUnit test matrix across PHP 7.4, 8.1, 8.2, 8.3, 8.4
+- Integrate all MW regression test suites (MW-03..MW-14) into standard PHPUnit execution
+
 * Sat Sep 12 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-21
 - Fix MW-14 (P2): Separate raw username, LDAP filter escaping, and DN bind identity
 - Apply RFC 4515 LDAP_ESCAPE_FILTER when constructing LDAP search filter
