@@ -28,7 +28,7 @@ Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
 Version:       6.0.6
 Epoch:         1
-Release:       22.eFa%{?dist}
+Release:       23.eFa%{?dist}
 License:       GNU GPL v2
 Group:         Applications/Utilities
 URL:           https://github.com/kit400/MailWatch-NG
@@ -176,6 +176,24 @@ fi
 %{_localstatedir}/www/html/mailscanner
 
 %changelog
+* Fri Sep 18 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-23
+- Fix MW-16 (P2): Refactor tests to test production code instead of local duplicates
+- Extract parse_proc_mounts and parse_mount_output in functions.php and use in get_disks
+- Extract MailWatchQueueParser in QueueParser.php and use in mailwatch_sendmail_queue.php
+- Refactor Ticker1284Test and Ticket1290Test to verify production logic
+- Neutralize CSV formula injection in tableExport.js, lists.php, and functions.php (sanitize_csv_cell, format_safe_csv_row, CSV_UTF8_BOM)
+- Bump PHPStan analysis to Level 1 with phpstan-baseline.neon
+- Add Integration testsuite covering 9 critical paths:
+  (1) User/Domain Admin/Admin isolation
+  (2) Session revocation and timeout enforcement
+  (3) Dangerous email HTML sanitization & XSS neutralization
+  (4) HTML attachments & CID scheme handling
+  (5) Multi-session cache isolation outside DocumentRoot
+  (6) Multi-batch deletion >20,000 records with budgets
+  (7) Permanent vs transient SQL failure classification
+  (8) Security metrics combined flags hierarchy without double counting
+  (9) Safe CSV formula escaping and UTF-8 BOM
+
 * Wed Sep 16 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 6.0.6-22
 - Fix MW-15 (P2): Enable automated CI workflows (PHPUnit, PHPStan, Format) for main branch
 - Move HTMLPurifier_URIScheme_cid to top level in functions.php for clean PHPStan symbol discovery
