@@ -1,4 +1,5 @@
-%define releasenum 2
+%define sourcerelease 2
+%define releasenum 3
 %undefine _disable_source_fetch
 
 Name:        MailScanner
@@ -10,7 +11,7 @@ License:     GPLv2
 Vendor:      MailScanner Community
 Packager:    MailScanner Team <https://www.mailscanner.info>
 URL:         http://www.mailscanner.info
-Source:      https://github.com/MailScanner/v5/archive/%{version}-%{releasenum}.tar.gz
+Source:      https://github.com/MailScanner/v5/archive/%{version}-%{sourcerelease}.tar.gz
 Requires:    perl >= 5.005
 Provides:    perl(MailScanner), perl(MailScanner::Antiword), perl(MailScanner::BinHex), perl(MailScanner::Config), perl(MailScanner::ConfigSQL), perl(MailScanner::CustomConfig), perl(MailScanner::FileInto), perl(MailScanner::GenericSpam), perl(MailScanner::LinksDump), perl(MailScanner::Lock), perl(MailScanner::Log), perl(MailScanner::Mail), perl(MailScanner::MCP), perl(MailScanner::MCPMessage), perl(MailScanner::Message), perl(MailScanner::MessageBatch), perl(MailScanner::Quarantine), perl(MailScanner::Queue), perl(MailScanner::RBLs), perl(MailScanner::MCPMessage), perl(MailScanner::Message), perl(MailScanner::MCP), perl(MailScanner::SA), perl(MailScanner::Sendmail), perl(MailScanner::SMDiskStore), perl(MailScanner::SweepContent), perl(MailScanner::SweepOther), perl(MailScanner::SweepViruses), perl(MailScanner::TNEF), perl(MailScanner::Unzip), perl(MailScanner::WorkArea), perl(MIME::Parser::MailScanner)
 BuildRoot:   %{_tmppath}/%{name}-root
@@ -19,6 +20,7 @@ AutoReqProv: no
 Obsoletes:   mailscanner
 Patch1:      mailscanner-spamrelease.patch
 Patch2:      mailscanner-spamreport.patch
+Patch3:      mailscanner-ms-update-fixes.patch
 
 %description
 MailScanner is a freely distributable email gateway virus scanner with
@@ -37,9 +39,10 @@ This has been tested on Red Hat Linux, but should work on other RPM
 based Linux distributions.
 
 %prep
-%setup -q -n v5-%{version}-%{releasenum}
+%setup -q -n v5-%{version}-%{sourcerelease}
 %patch -P 1 -p1
 %patch -P 2 -p1
+%patch -P 3 -p1
 
 %build
 
@@ -1231,6 +1234,11 @@ exit 0
 %config(noreplace) /usr/share/MailScanner/reports/ca/stored.virus.message.txt
 
 %changelog
+* Thu Oct 08 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 5.5.3-3.eFa
+- Fix ms-update-sa: suppress stderr when sa-compile, re2c, or sa-update are missing to avoid daily cron noise
+- Fix ms-update-phishing: prevent corruption and gzip unexpected end of file on safe/bad phishing list updates
+- Handle HTTP 304 Not Modified cleanly and preserve remote timestamps via curl -R
+
 * Wed Aug 19 2026 kit <kit@EFA-NG-Dev.ukrpack.net> - 5.5.3-2.eFa
 - Update MailScanner to upstream version 5.5.3-2
 - Preserve all eFa patches (mailscanner-spamrelease.patch, mailscanner-spamreport.patch)

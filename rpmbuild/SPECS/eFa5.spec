@@ -17,7 +17,7 @@
 # along with this SPEC. If not, see <http://www.gnu.org/licenses/>.
 #-----------------------------------------------------------------------------#
 
-%define releasenum 11
+%define releasenum 12
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
@@ -288,6 +288,8 @@ Requires:  MailWatch >= 1:6.0.4-1
     # MailWatch                                  # eFa     # MailWatch Frontend
 Requires:  spamassassin >= 4.0.1-2
     # spamassassin                               # eFa     # MailScanner
+Requires:  spamassassin-compile >= 4.0.1-2
+    # spamassassin-compile                       # epel    # SpamAssassin Rule2XSBody sa-compile
 Requires:  clamav-unofficial-sigs >= 1:7.2.5-1
     # clamav-unofficial-sigs                     # eFa     # clamav
 Requires: eFa-base >= 5.0.0-1
@@ -586,6 +588,9 @@ rm -rf $RPM_BUILD_ROOT
 %attr(0644, root, root) %{_sysconfdir}/logrotate.d/eFa-logrotate
 
 %changelog
+* Thu Oct 08 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.6-12
+- Add spamassassin-compile dependency for EL10 to provide sa-compile and enable native Rule2XSBody rules compilation
+
 * Wed Sep 09 2026 EFA-NG Project <https://github.com/kit400/EFA-NG> - 6.0.6-11
 - Include custom SpamAssassin *.cf rules (e.g. local_tld_rules.cf) in eFa-Migrate audit, review, and migration
 - Preserve EL10 SpamAssassin module loaders (*.pre) from being overwritten during migration
