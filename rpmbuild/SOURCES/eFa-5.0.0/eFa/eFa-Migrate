@@ -1,7 +1,7 @@
 #!/bin/bash
 # +--------------------------------------------------------------------+
 # eFa-Migrate - EFA-NG Live Migration & Backup Transfer Wizard
-# Version 6.0.6
+# Version 6.0.7
 # +--------------------------------------------------------------------+
 # Copyright (C) 2012-2026 MailWatch Team / EFA-NG Project
 # https://efa-ng.space.ua | Support: https://t.me/EFA_NG
@@ -683,6 +683,7 @@ create_target_snapshot() {
 # Migration Execution
 # -----------------------------------------------------------------------------
 execute_migration() {
+    local mig_errors=0
     echo_header
     echo -e " ${bold}Step 6: Executing Migration from ${cyan}$SRC_HOST${clean} to ${green}$TARGET_HOSTNAME${clean}"
     echo -e " ──────────────────────────────────────────────────────────────────"
@@ -772,7 +773,8 @@ execute_migration() {
             if [[ ${PIPESTATUS[0]} -eq 0 && ${PIPESTATUS[1]} -eq 0 ]]; then
                 echo -e "       ${green}✔ Users, permissions, allowlists and blocklists migrated.${clean}"
             else
-                echo -e "       ${red}✖ Warning: Error importing users/lists tables.${clean}"
+                echo -e "       ${red}✖ Error importing users/lists tables.${clean}"
+                mig_errors=$((mig_errors + 1))
             fi
         else
             echo -e "       ${yellow}● Warning: No user or list tables found on source.${clean}"
@@ -785,7 +787,11 @@ execute_migration() {
         echo -e "       ${yellow}●${clean} Transferring sa_bayes SQL database..."
         ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
             "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction sa_bayes 2>/dev/null" \
-            | mysql -u root -p"$TARGET_MYSQLPWD" sa_bayes 2>/dev/null || true
+            | mysql -u root -p"$TARGET_MYSQLPWD" sa_bayes 2>/dev/null
+        if [[ ${PIPESTATUS[0]} -ne 0 || ${PIPESTATUS[1]} -ne 0 ]]; then
+            echo -e "       ${red}✖ Warning: Failed to transfer sa_bayes database.${clean}"
+            mig_errors=$((mig_errors + 1))
+        fi
 
         # Fix bayes user in DB
         mysql -u root -p"$TARGET_MYSQLPWD" sa_bayes -e "UPDATE bayes_vars SET username = 'postfix' WHERE id = '1';" 2>/dev/null || true
@@ -798,14 +804,14 @@ execute_migration() {
             --exclude="mailscanner.cf" \
             --exclude="spamassassin-default.rc" \
             --exclude="spamassassin-spamc.rc" \
-            --exclude="spamassassin-helper.sh" 2>/dev/null || true
+            --exclude="spamassassin-helper.sh" 2>/dev/null || mig_errors=$((mig_errors + 1))
         chown root:root /etc/mail/spamassassin/*.cf 2>/dev/null || true
         chmod 0644 /etc/mail/spamassassin/*.cf 2>/dev/null || true
 
         # Verify SpamAssassin rule syntax
         spamassassin --lint >/dev/null 2>&1 || true
 
-        echo -e "       ${green}✔ SpamAssassin database and rules migrated.${clean}"
+        echo -e "       ${green}✔ SpamAssassin database and rules step completed.${clean}"
     fi
 
     # 4. Quarantine
@@ -817,12 +823,15 @@ execute_migration() {
             | mysql -u root -p"$TARGET_MYSQLPWD" mailscanner 2>/dev/null || true
 
         echo -e "       ${yellow}●${clean} Syncing quarantine spool files (/var/spool/MailScanner/quarantine)..."
-        rsync -aHAX --info=progress2 -e "ssh -p $SRC_PORT" \
-            "$SRC_USER@$SRC_HOST:/var/spool/MailScanner/quarantine/" /var/spool/MailScanner/quarantine/ 2>/dev/null || true
+        if ! rsync -aHAX --info=progress2 -e "ssh -p $SRC_PORT" \
+            "$SRC_USER@$SRC_HOST:/var/spool/MailScanner/quarantine/" /var/spool/MailScanner/quarantine/ 2>/dev/null; then
+            echo -e "       ${red}✖ Error syncing quarantine spool directory.${clean}"
+            mig_errors=$((mig_errors + 1))
+        fi
 
         chown -R postfix:apache /var/spool/MailScanner/quarantine 2>/dev/null || true
         chmod -R 770 /var/spool/MailScanner/quarantine 2>/dev/null || true
-        echo -e "       ${green}✔ Quarantine migrated.${clean}"
+        echo -e "       ${green}✔ Quarantine step completed.${clean}"
     fi
 
     # 5. Message History & Logs
@@ -848,6 +857,7 @@ execute_migration() {
                 echo -e "       ${green}✔ Message logs migrated successfully.${clean}"
             else
                 echo -e "       ${red}✖ Error importing message logs table.${clean}"
+                mig_errors=$((mig_errors + 1))
             fi
         fi
 
@@ -866,9 +876,13 @@ execute_migration() {
         echo -e " ${cyan}[6/7] Migrating SQLGrey Greylisting Database...${clean}"
         ssh -p "$SRC_PORT" "$SRC_USER@$SRC_HOST" \
             "mysqldump -u root -p'$SRC_MYSQLPWD' --single-transaction sqlgrey 2>/dev/null" \
-            | mysql -u root -p"$TARGET_MYSQLPWD" sqlgrey 2>/dev/null || true
+            | mysql -u root -p"$TARGET_MYSQLPWD" sqlgrey 2>/dev/null
+        if [[ ${PIPESTATUS[0]} -ne 0 || ${PIPESTATUS[1]} -ne 0 ]]; then
+            echo -e "       ${red}✖ Warning: Failed to transfer sqlgrey database.${clean}"
+            mig_errors=$((mig_errors + 1))
+        fi
         rsync -a -e "ssh -p $SRC_PORT" "$SRC_USER@$SRC_HOST:/etc/sqlgrey/" /etc/sqlgrey/ 2>/dev/null || true
-        echo -e "       ${green}✔ Greylisting database migrated.${clean}"
+        echo -e "       ${green}✔ Greylisting database step completed.${clean}"
     fi
 
     # 7. GeoIP Databases
@@ -906,15 +920,20 @@ execute_migration() {
 
     echo ""
     echo -e " ${cyan}┌────────────────────────────────────────────────────────────────────────┐${clean}"
-    fmt_box_center "${bold}MIGRATION COMPLETED SUCCESSFULLY!${clean}"
+    if [[ $mig_errors -eq 0 ]]; then
+        fmt_box_center "${bold}MIGRATION COMPLETED SUCCESSFULLY!${clean}"
+    else
+        fmt_box_center "${bold}${red}MIGRATION COMPLETED WITH $mig_errors ERROR(S)!${clean}"
+    fi
     echo -e " ${cyan}├────────────────────────────────────────────────────────────────────────┤${clean}"
     fmt_box_line "All selected configurations, databases, and assets have been"
-    fmt_box_line "transferred from ${cyan}$SRC_HOST${clean} to this server."
+    fmt_box_line "processed from ${cyan}$SRC_HOST${clean} to this server."
     fmt_box_line ""
     fmt_box_line "Web GUI URL : ${green}https://${TARGET_IP:-$TARGET_HOSTNAME}/mailscanner/${clean}"
     echo -e " ${cyan}└────────────────────────────────────────────────────────────────────────┘${clean}"
     echo ""
     pause_prompt "Press [Enter] to return..."
+    return $mig_errors
 }
 
 # -----------------------------------------------------------------------------
@@ -955,13 +974,13 @@ Options:
 
 Cron Examples:
   # Daily full automated migration from source server at 03:00
-  0 3 * * * /usr/sbin/eFa-Migrate --cron --source=195.230.150.68 >> /var/log/eFa/eFa-Migrate.log 2>&1
+  0 3 * * * /usr/sbin/eFa-Migrate --cron --source=192.0.2.10 >> /var/log/eFa/eFa-Migrate.log 2>&1
 
   # Full automated migration with 30-day message history on custom SSH port
   eFa-Migrate --cron --source=old-efa.domain.com --port=2222 --history-range=30d
 
   # Quick sync without message history and without snapshot
-  eFa-Migrate --cron --source=195.230.150.68 --no-history --no-snapshot
+  eFa-Migrate --cron --source=192.0.2.10 --no-history --no-snapshot
 
 EOF
 }

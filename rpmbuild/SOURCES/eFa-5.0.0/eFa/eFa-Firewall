@@ -79,43 +79,69 @@ COUNTRY_NAMES = {
 def get_country_name(code):
     return COUNTRY_NAMES.get(code.upper(), code.upper())
 
+def detect_ssh_client_ip():
+    for env_var in ("SSH_CLIENT", "SSH_CONNECTION"):
+        val = os.environ.get(env_var, "").strip()
+        if val:
+            parts = val.split()
+            if parts:
+                norm, _ = normalize_ip(parts[0])
+                if norm:
+                    return norm
+    return None
+
+def ensure_ssh_session_admin(cfg):
+    ssh_ip = detect_ssh_client_ip()
+    if not ssh_ip:
+        return False
+    try:
+        client_addr = ipaddress.ip_address(ssh_ip)
+    except ValueError:
+        return False
+    admins = cfg.setdefault("admins", [])
+    for item in admins:
+        norm, _ = normalize_ip(item.get("ip", ""))
+        if not norm:
+            continue
+        try:
+            net = ipaddress.ip_network(norm, strict=False)
+            if client_addr in net:
+                return False
+        except ValueError:
+            continue
+    admins.append({"ip": ssh_ip, "comment": "Auto-detected SSH Admin Session"})
+    return True
+
 def get_default_config():
+    admins = [
+        {"ip": "127.0.0.1", "comment": "Localhost loopback"},
+        {"ip": "::1", "comment": "IPv6 loopback"}
+    ]
+    ssh_ip = detect_ssh_client_ip()
+    if ssh_ip and ssh_ip not in ("127.0.0.1", "::1"):
+        admins.append({"ip": ssh_ip, "comment": "Auto-detected SSH Admin Session"})
+
     return {
         "version": "1.0",
-        "enabled": True,
+        "enabled": False,
         "allow_ping": True,
         "public_ports": [
             {"port": "25", "proto": "tcp", "comment": "SMTP Mail Server (Public)"}
         ],
-        "admins": [
-            {"ip": "127.0.0.1", "comment": "Localhost loopback"},
-            {"ip": "195.230.150.128/27", "comment": "Admin Subnet (NOC)"},
-            {"ip": "212.1.66.158", "comment": "Admin External Host"},
-            {"ip": "195.230.150.69", "comment": "EFA-NG Dev Server"}
-        ],
+        "admins": admins,
         "trusted": {
             "ports": [
                 {"port": "3306", "proto": "tcp", "comment": "MariaDB Database"},
                 {"port": "10050", "proto": "tcp", "comment": "Zabbix Agent"}
             ],
-            "entries": [
-                {"ip": "195.230.150.0/24", "comment": "Infocom Trusted Network (DB & Zabbix)"}
-            ]
+            "entries": []
         },
         "http_only": {
             "ports": [
                 {"port": "80", "proto": "tcp", "comment": "HTTP Web Interface"},
                 {"port": "443", "proto": "tcp", "comment": "HTTPS Secure Web Interface"}
             ],
-            "entries": [
-                {"ip": "195.230.150.128/27", "comment": "NOC Subnet"},
-                {"ip": "212.1.66.0/24", "comment": "Infocom Network"},
-                {"ip": "94.101.42.162", "comment": "Remote Web User 1"},
-                {"ip": "185.239.185.200", "comment": "Remote Web User 2"},
-                {"ip": "77.235.167.209", "comment": "Remote Web User 3"},
-                {"ip": "195.230.150.225", "comment": "Remote Web User 4"},
-                {"ip": "195.230.150.69", "comment": "Dev Server Web Access"}
-            ]
+            "entries": []
         },
         "mail_clients": {
             "ports": [
@@ -125,31 +151,15 @@ def get_default_config():
                 {"port": "993", "proto": "tcp", "comment": "IMAPS Secure IMAP"},
                 {"port": "995", "proto": "tcp", "comment": "POP3S Secure POP3"}
             ],
-            "entries": [
-                {"ip": "195.230.150.128/27", "comment": "NOC Subnet"},
-                {"ip": "212.1.66.0/24", "comment": "Infocom Network"},
-                {"ip": "94.101.42.162", "comment": "Remote Mail Client 1"},
-                {"ip": "185.239.185.200", "comment": "Remote Mail Client 2"},
-                {"ip": "77.235.167.209", "comment": "Remote Mail Client 3"},
-                {"ip": "195.230.150.225", "comment": "Remote Mail Client 4"},
-                {"ip": "195.230.150.69", "comment": "Dev Server Mail Access"}
-            ]
+            "entries": []
         },
         "geoip": {
-            "enabled": True,
-            "global_blacklist": [
-                {"country": "RU", "comment": "Russian Federation (Global Drop)"},
-                {"country": "CN", "comment": "China (Global Drop)"},
-                {"country": "BR", "comment": "Brazil (Global Drop)"}
-            ],
+            "enabled": False,
+            "global_blacklist": [],
             "groups": {
                 "http_only": {
-                    "mode": "whitelist",
-                    "countries": [
-                        {"country": "UA", "comment": "Ukraine"},
-                        {"country": "US", "comment": "United States"},
-                        {"country": "DE", "comment": "Germany"}
-                    ]
+                    "mode": "disabled",
+                    "countries": []
                 },
                 "mail_clients": {
                     "mode": "disabled",
@@ -187,7 +197,7 @@ def load_config():
                     dirty = True
                 if "geoip" not in cfg:
                     cfg["geoip"] = {
-                        "enabled": True,
+                        "enabled": False,
                         "global_blacklist": [],
                         "groups": {
                             "http_only": {"mode": "disabled", "countries": []},
@@ -253,7 +263,7 @@ def fetch_country_zone(country_code, force=False):
     if need_v4:
         v4_lines = []
         try:
-            url = f"http://www.ipdeny.com/ipblocks/data/countries/{cc}.zone"
+            url = f"https://www.ipdeny.com/ipblocks/data/countries/{cc}.zone"
             req = urllib.request.Request(url, headers={"User-Agent": "eFa-Firewall/6.0"})
             with urllib.request.urlopen(req, timeout=8) as resp:
                 for line in resp.read().decode("utf-8", errors="ignore").splitlines():
@@ -420,14 +430,18 @@ def setup_nftables_persistence():
         pass
 
 def apply_firewall(cfg, silent=False):
+    enabled = cfg.get("enabled", False)
+    allow_ping = cfg.get("allow_ping", True)
+
+    if enabled:
+        if ensure_ssh_session_admin(cfg):
+            save_config(cfg)
+
     if not silent:
         if RICH_AVAILABLE:
             console.print("[bold cyan]● Generating and applying native NFTables configuration...[/]")
         else:
             print("[eFa-Firewall] Generating and applying native NFTables configuration...")
-
-    enabled = cfg.get("enabled", True)
-    allow_ping = cfg.get("allow_ping", True)
 
     nft_lines = [
         "#!/usr/sbin/nft -f",
@@ -443,19 +457,33 @@ def apply_firewall(cfg, silent=False):
     ]
 
     if not enabled:
-        # Open / Unrestricted Mode
-        nft_lines.extend([
-            "    chain input {",
-            "        type filter hook input priority filter; policy accept;",
-            "    }",
-            "    chain forward {",
-            "        type filter hook forward priority filter; policy accept;",
-            "    }",
-            "    chain output {",
-            "        type filter hook output priority filter; policy accept;",
-            "    }",
-            "}"
-        ])
+        # Open / Unrestricted Mode: do not disable firewalld or impose restrictions
+        if is_nftables_active():
+            subprocess.run(["nft", "delete", "table", "inet", "efa"], capture_output=True, text=True)
+        if os.path.exists(NFT_EFA_FILE):
+            nft_lines.extend([
+                "    chain input {",
+                "        type filter hook input priority filter; policy accept;",
+                "    }",
+                "    chain forward {",
+                "        type filter hook forward priority filter; policy accept;",
+                "    }",
+                "    chain output {",
+                "        type filter hook output priority filter; policy accept;",
+                "    }",
+                "}"
+            ])
+            tmp_file = NFT_EFA_FILE + ".tmp"
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                f.write("\n".join(nft_lines) + "\n")
+            os.chmod(tmp_file, 0o644)
+            os.replace(tmp_file, NFT_EFA_FILE)
+        if not silent:
+            if RICH_AVAILABLE:
+                console.print("[bold yellow]● eFa-Firewall restriction mode is DISABLED (Open Mode).[/]")
+            else:
+                print("[eFa-Firewall] Restriction mode is DISABLED (Open Mode).")
+        return True
     else:
         # 1. Parse Static IPs
         admin_v4, admin_v6 = set(), set()
@@ -735,7 +763,7 @@ def is_nftables_active():
 
 def show_status(cfg):
     is_active = is_nftables_active()
-    enabled = cfg.get("enabled", True)
+    enabled = cfg.get("enabled", False)
     
     if not RICH_AVAILABLE:
         print("Firewall Engine: NFTables (Native)")
@@ -1166,7 +1194,7 @@ def manage_global_blacklist_tui(cfg):
                     break
             if not found:
                 entries.append({"country": cc_in, "comment": comm})
-            
+            cfg.setdefault("geoip", {})["enabled"] = True
             save_config(cfg)
             apply_firewall(cfg)
             Prompt.ask("[bold green]● Country added to Global Blacklist! Press Enter...[/]")
@@ -1267,7 +1295,7 @@ def manage_group_geoip_tui(cfg, gkey, gname, ports_desc):
             if gdata.get("mode") == "disabled":
                 if Confirm.ask("Group filter mode is currently DISABLED. Enable WHITELIST mode now?", default=True):
                     gdata["mode"] = "whitelist"
-
+            cfg.setdefault("geoip", {})["enabled"] = True
             save_config(cfg)
             apply_firewall(cfg)
             Prompt.ask("[bold green]● Country added and firewall updated! Press Enter...[/]")
@@ -1358,8 +1386,8 @@ def interactive_tui():
         menu_table.add_row("[ 8 ]", "● Apply Rules & Reload Now", "Regenerate and reload native NFTables rules")
         menu_table.add_row("[ 9 ]", "● Update GeoIP Database Now", "Download latest country CIDR zone files")
         
-        mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", True) else "Enable Protection (Restricted ACL)"
-        mode_color = "yellow" if cfg.get("enabled", True) else "green"
+        mode_label = "Disable Protection (Open Mode)" if cfg.get("enabled", False) else "Enable Protection (Restricted ACL)"
+        mode_color = "yellow" if cfg.get("enabled", False) else "green"
         menu_table.add_row("[ 10 ]", f"[{mode_color}]● {mode_label}[/]", "Toggle global firewall restriction mode")
         menu_table.add_row("", "", "")
         menu_table.add_row("[ 0 ]", "● Exit to Configuration Console", "Return to main eFa-Configure menu")
@@ -1394,7 +1422,9 @@ def interactive_tui():
             apply_firewall(cfg)
             Prompt.ask("[bold cyan]Press [Enter] to return to Main Menu...[/]")
         elif choice == "10":
-            cfg["enabled"] = not cfg.get("enabled", True)
+            cfg["enabled"] = not cfg.get("enabled", False)
+            if cfg["enabled"]:
+                ensure_ssh_session_admin(cfg)
             save_config(cfg)
             apply_firewall(cfg)
             status_str = "ENABLED (Restricted)" if cfg["enabled"] else "DISABLED (Open)"
@@ -1435,6 +1465,7 @@ def main():
         sys.exit(0)
     elif args.enable:
         cfg["enabled"] = True
+        ensure_ssh_session_admin(cfg)
         save_config(cfg)
         apply_firewall(cfg)
         sys.exit(0)
@@ -1468,6 +1499,7 @@ def main():
                 break
         if not found:
             entries.append({"country": cc, "comment": comm})
+        cfg.setdefault("geoip", {})["enabled"] = True
         save_config(cfg)
         apply_firewall(cfg)
         sys.exit(0)

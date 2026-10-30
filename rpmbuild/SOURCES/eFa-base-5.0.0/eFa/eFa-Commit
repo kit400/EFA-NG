@@ -976,22 +976,27 @@ EOF
   fi
 
   # Configure Firewall
-  systemctl enable firewalld
-  [ $? -ne 0 ] && exit 1
-  systemctl start firewalld
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --permanent --add-service=smtp
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --permanent --add-service=ssh
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --permanent --add-port 80/tcp
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --permanent --add-port 443/tcp
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --permanent --add-port 587/tcp
-  [ $? -ne 0 ] && exit 1
-  firewall-cmd --reload
-  [ $? -ne 0 ] && exit 1
+  if [ -f /etc/eFa/firewall.conf ] && grep -q '"enabled"[[:space:]]*:[[:space:]]*true' /etc/eFa/firewall.conf 2>/dev/null && [ -x /usr/sbin/eFa-Firewall ]; then
+    /usr/sbin/eFa-Firewall --apply
+    [ $? -ne 0 ] && exit 1
+  else
+    systemctl enable firewalld
+    [ $? -ne 0 ] && exit 1
+    systemctl start firewalld
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --permanent --add-service=smtp
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --permanent --add-service=ssh
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --permanent --add-port 80/tcp
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --permanent --add-port 443/tcp
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --permanent --add-port 587/tcp
+    [ $? -ne 0 ] && exit 1
+    firewall-cmd --reload
+    [ $? -ne 0 ] && exit 1
+  fi
 
   sed -i "/CONFIGURED:/ c\CONFIGURED:YES" /etc/eFa/eFa-Config
   [ $? -ne 0 ] && exit 1

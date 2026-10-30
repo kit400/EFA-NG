@@ -521,9 +521,6 @@ if [ "$1" = "1" ]; then
                 chmod 0640 %{_sysconfdir}/eFa/firewall.conf
             fi
         fi
-        if [ -x %{_sbindir}/eFa-Firewall ]; then
-            %{_sbindir}/eFa-Firewall --apply >/dev/null 2>&1 || true
-        fi
 
         echo "Build completed!"
     fi
@@ -548,9 +545,10 @@ if [[ "$1" == "2" || "$flag" == "1" ]]; then
             cp %{_sysconfdir}/eFa/firewall.conf.default %{_sysconfdir}/eFa/firewall.conf
             chmod 0640 %{_sysconfdir}/eFa/firewall.conf
         fi
-    fi
-    if [ -x %{_sbindir}/eFa-Firewall ]; then
-        %{_sbindir}/eFa-Firewall --apply >/dev/null 2>&1 || true
+    elif grep -q '"enabled"[[:space:]]*:[[:space:]]*true' %{_sysconfdir}/eFa/firewall.conf 2>/dev/null; then
+        if [ -x %{_sbindir}/eFa-Firewall ]; then
+            %{_sbindir}/eFa-Firewall --apply >/dev/null 2>&1 || true
+        fi
     fi
 
     echo "Update completed successfully!"

@@ -101,12 +101,21 @@ if [ "$DRY_RUN" -eq 0 ]; then
         sed -i -E "s/return 'eFa-[0-9.]+';/return 'eFa-${CLEAN_VERSION}';/g" "${MAILWATCH_DIR}/mailscanner/functions.php"
     fi
 
-    # Update RPM spec if present
+    # Update RPM specs if present
     if [ -f "${EFA_DIR}/rpmbuild/SPECS/eFa5.spec" ]; then
         sed -i -E "s/^Version:\s+[0-9.]+/Version: ${CLEAN_VERSION}/g" "${EFA_DIR}/rpmbuild/SPECS/eFa5.spec"
     fi
+    if [ -f "${EFA_DIR}/rpmbuild/SPECS/MailWatch.spec" ]; then
+        sed -i -E "s/^Version:\s+[0-9.]+/Version:       ${CLEAN_VERSION}/g" "${EFA_DIR}/rpmbuild/SPECS/MailWatch.spec"
+    fi
 
-    # Update version.json files
+    # Build and sign updated eFa and MailWatch RPM packages BEFORE updating version.json
+    if [ -x "${EFA_DIR}/rpmbuild/SPECS/build_all_rpms.sh" ]; then
+        log "Building and signing RPM packages (MailWatch.spec, eFa5.spec) for ${CLEAN_VERSION}..."
+        bash "${EFA_DIR}/rpmbuild/SPECS/build_all_rpms.sh" MailWatch.spec eFa5.spec
+    fi
+
+    # Update version.json files only after RPM build succeeds
     if [ -f "${EFA_DIR}/version.json" ]; then
         sed -i -E "s/\"version\": \"[^\"]+\"/\"version\": \"${CLEAN_VERSION}\"/g" "${EFA_DIR}/version.json"
     fi

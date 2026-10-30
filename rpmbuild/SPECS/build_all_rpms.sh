@@ -6,13 +6,16 @@
 # Copyright (C) 2026 EFA-NG Project https://github.com/kit400/EFA-NG
 # License: GNU GPL v3+
 ######################################################################
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RPMBUILD_DIR="$SCRIPT_DIR/rpmbuild"
 SPECS_DIR="$RPMBUILD_DIR/SPECS"
 SOURCES_DIR="$RPMBUILD_DIR/SOURCES"
 OUTPUT_REPO_DIR="$SCRIPT_DIR/rpm/efa-ng/centos10/release"
+GPG_KEY_NAME="EFA-NG Release Signing Key <security@efa-ng.space.ua>"
+PUBLIC_KEY_PATH="$SCRIPT_DIR/rpm/efa-ng/RPM-GPG-KEY-EFA-NG"
+MAILWATCH_REPO_DIR="${MAILWATCH_REPO_DIR:-/home/kit/MailWatch-NG}"
 
 echo "=================================================================="
 echo "Starting EFA-NG RPM Build Pipeline for CentOS 10 / EL10"
@@ -21,64 +24,83 @@ echo "=================================================================="
 
 # Ensure directories exist
 mkdir -p "$RPMBUILD_DIR"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-mkdir -p "$OUTPUT_REPO_DIR"/{x86_64,noarch}
+mkdir -p "$OUTPUT_REPO_DIR"
 
 # Setup RPM macro topdir
 export RPM_TOPDIR="$RPMBUILD_DIR"
-echo "%_topdir $RPMBUILD_DIR" > ~/.rpmmacros
+cat > ~/.rpmmacros <<EOF
+%_topdir $RPMBUILD_DIR
+%_gpg_name $GPG_KEY_NAME
+EOF
 
-# 1. Package source tarballs for eFa and eFa-base
-echo "--> Creating source tarballs..."
+EFA_VERSION=$(awk '/^Version:/ {print $2; exit}' "$SPECS_DIR/eFa5.spec")
+EFA_BASE_VERSION=$(awk '/^Version:/ {print $2; exit}' "$SPECS_DIR/eFa5-base.spec")
+MW_VERSION=$(awk '/^Version:/ {print $2; exit}' "$SPECS_DIR/MailWatch.spec")
+
+# 1. Package source tarballs for eFa, eFa-base, and MailWatch
+echo "--> Creating source tarballs (eFa=${EFA_VERSION}, eFa-base=${EFA_BASE_VERSION}, MailWatch=${MW_VERSION})..."
 cd "$SOURCES_DIR"
 if [ -d "eFa-5.0.0" ]; then
-    rm -f eFa-5.0.0.tar.gz
-    tar czf eFa-5.0.0.tar.gz eFa-5.0.0
-    echo "  [OK] eFa-5.0.0.tar.gz created"
+    rm -f "eFa-${EFA_VERSION}.tar.gz"
+    tar czf "eFa-${EFA_VERSION}.tar.gz" --transform "s|^eFa-5.0.0|eFa-${EFA_VERSION}|" eFa-5.0.0
+    echo "  [OK] eFa-${EFA_VERSION}.tar.gz created"
 fi
 
 if [ -d "eFa-base-5.0.0" ]; then
-    rm -f eFa-base-5.0.0.tar.gz
-    tar czf eFa-base-5.0.0.tar.gz eFa-base-5.0.0
-    echo "  [OK] eFa-base-5.0.0.tar.gz created"
+    rm -f "eFa-base-${EFA_BASE_VERSION}.tar.gz"
+    tar czf "eFa-base-${EFA_BASE_VERSION}.tar.gz" --transform "s|^eFa-base-5.0.0|eFa-base-${EFA_BASE_VERSION}|" eFa-base-5.0.0
+    echo "  [OK] eFa-base-${EFA_BASE_VERSION}.tar.gz created"
+fi
+
+if [ -d "$MAILWATCH_REPO_DIR" ]; then
+    rm -f "$SOURCES_DIR/MailWatch-${MW_VERSION}.tar.gz"
+    tar czf "$SOURCES_DIR/MailWatch-${MW_VERSION}.tar.gz" \
+        --exclude='.git' \
+        --transform "s|^\\.|MailWatch-NG-${MW_VERSION}|" \
+        -C "$MAILWATCH_REPO_DIR" .
+    echo "  [OK] MailWatch-${MW_VERSION}.tar.gz created from $MAILWATCH_REPO_DIR"
 fi
 
 cd "$SPECS_DIR"
 
-# List of spec files to build in dependency order
-SPECS_TO_BUILD=(
-    "perl-Sys-SigAction.spec"
-    "perl-Sys-Hostname-Long.spec"
-    "perl-Sendmail-PMilter.spec"
-    "perl-Net-LibIDN.spec"
-    "perl-Net-DNS-Resolver-Programmable.spec"
-    "perl-IP-Country.spec"
-    "perl-IP-Country-DB_File.spec"
-    "perl-Geo-IP.spec"
-    "perl-Encoding-FixLatin.spec"
-    "perl-Mail-DMARC.spec"
-    "perl-Net-IDN-Encode.spec"
-    "perl-Test-File-ShareDir.spec"
-    "tnef.spec"
-    "unrar.spec"
-    "dcc.spec"
-    "sqlgrey.spec"
-    "sqlgreywebinterface.spec"
-    "clamav-unofficial-sigs.spec"
-    "mailscanner.spec"
-    "MailWatch.spec"
-    "eFa5-base.spec"
-    "eFa5.spec"
-)
+# If arguments are passed, build only those specs; otherwise build full list
+if [ "$#" -gt 0 ]; then
+    SPECS_TO_BUILD=("$@")
+else
+    SPECS_TO_BUILD=(
+        "perl-Sys-SigAction.spec"
+        "perl-Sys-Hostname-Long.spec"
+        "perl-Sendmail-PMilter.spec"
+        "perl-Net-LibIDN.spec"
+        "perl-Net-DNS-Resolver-Programmable.spec"
+        "perl-IP-Country.spec"
+        "perl-IP-Country-DB_File.spec"
+        "perl-Geo-IP.spec"
+        "perl-Encoding-FixLatin.spec"
+        "perl-Mail-DMARC.spec"
+        "perl-Net-IDN-Encode.spec"
+        "perl-Test-File-ShareDir.spec"
+        "tnef.spec"
+        "unrar.spec"
+        "dcc.spec"
+        "sqlgrey.spec"
+        "sqlgreywebinterface.spec"
+        "clamav-unofficial-sigs.spec"
+        "mailscanner.spec"
+        "MailWatch.spec"
+        "eFa5-base.spec"
+        "eFa5.spec"
+    )
+fi
 
-# 2. Build RPM packages
+# 2. Build RPM packages (fail fast on any error)
 for spec in "${SPECS_TO_BUILD[@]}"; do
     if [ -f "$spec" ]; then
         echo "--> Building RPM from $spec..."
-        rpmbuild -ba --define "_topdir $RPMBUILD_DIR" "$spec" || {
-            echo "  [WARNING] Build failed for $spec (continuing with remaining packages)"
-        }
+        rpmbuild -bb --define "_topdir $RPMBUILD_DIR" "$spec"
     else
-        echo "  [SKIP] $spec not found"
+        echo "  [ERROR] $spec not found" >&2
+        exit 1
     fi
 done
 
@@ -86,7 +108,15 @@ done
 echo "--> Collecting built RPMs..."
 find "$RPMBUILD_DIR/RPMS" -type f -name "*.rpm" -exec cp -v {} "$OUTPUT_REPO_DIR/" \;
 
-# 4. Generate repository metadata if createrepo_c is available
+# 4. Sign RPMs if GPG key and rpmsign are available
+if command -v rpmsign >/dev/null 2>&1 && gpg --list-secret-keys "$GPG_KEY_NAME" >/dev/null 2>&1; then
+    echo "--> Signing RPM packages with GPG key: $GPG_KEY_NAME..."
+    rpmsign --addsign --define "_gpg_name $GPG_KEY_NAME" "$OUTPUT_REPO_DIR"/*.rpm
+    gpg --armor --export "$GPG_KEY_NAME" > "$PUBLIC_KEY_PATH"
+    echo "  [OK] RPMs signed and public key exported to $PUBLIC_KEY_PATH"
+fi
+
+# 5. Generate repository metadata and sign repomd.xml
 if command -v createrepo_c >/dev/null 2>&1; then
     echo "--> Generating repository metadata with createrepo_c..."
     createrepo_c "$OUTPUT_REPO_DIR"
@@ -96,7 +126,18 @@ elif command -v createrepo >/dev/null 2>&1; then
     createrepo "$OUTPUT_REPO_DIR"
     echo "  [OK] Repository metadata generated at $OUTPUT_REPO_DIR/repodata"
 else
-    echo "  [NOTICE] createrepo_c not installed. Run 'sudo dnf install createrepo_c' and execute 'createrepo_c $OUTPUT_REPO_DIR'."
+    echo "  [ERROR] createrepo_c not installed." >&2
+    exit 1
+fi
+
+if gpg --list-secret-keys "$GPG_KEY_NAME" >/dev/null 2>&1; then
+    echo "--> Signing repomd.xml..."
+    rm -f "$OUTPUT_REPO_DIR/repodata/repomd.xml.asc"
+    gpg --batch --yes --detach-sign --armor -u "$GPG_KEY_NAME" \
+        -o "$OUTPUT_REPO_DIR/repodata/repomd.xml.asc" \
+        "$OUTPUT_REPO_DIR/repodata/repomd.xml"
+    cp -f "$PUBLIC_KEY_PATH" "$OUTPUT_REPO_DIR/repodata/repomd.xml.key"
+    echo "  [OK] Signed repodata/repomd.xml.asc"
 fi
 
 echo "=================================================================="

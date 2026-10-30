@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "enabled": true,
+  "enabled": false,
   "allow_ping": true,
   "public_ports": [
     {
@@ -15,12 +15,8 @@
       "comment": "Localhost loopback"
     },
     {
-      "ip": "10.0.0.0/8",
-      "comment": "Example Internal Admin Subnet"
-    },
-    {
-      "ip": "192.168.1.0/24",
-      "comment": "Example Office Network"
+      "ip": "::1",
+      "comment": "IPv6 loopback"
     }
   ],
   "trusted": {
@@ -36,16 +32,7 @@
         "comment": "Zabbix Agent"
       }
     ],
-    "entries": [
-      {
-        "ip": "10.0.0.0/8",
-        "comment": "Example Monitoring and DB Clients"
-      },
-      {
-        "ip": "192.168.1.0/24",
-        "comment": "Example Trusted LAN"
-      }
-    ]
+    "entries": []
   },
   "http_only": {
     "ports": [
@@ -60,16 +47,7 @@
         "comment": "HTTPS Secure Web Interface"
       }
     ],
-    "entries": [
-      {
-        "ip": "10.0.0.0/8",
-        "comment": "Example Web Management Subnet"
-      },
-      {
-        "ip": "192.168.1.0/24",
-        "comment": "Example Corporate Web Users"
-      }
-    ]
+    "entries": []
   },
   "mail_clients": {
     "ports": [
@@ -99,50 +77,15 @@
         "comment": "POP3S Secure POP3"
       }
     ],
-    "entries": [
-      {
-        "ip": "10.0.0.0/8",
-        "comment": "Example Corporate Mail Clients Subnet"
-      },
-      {
-        "ip": "192.168.1.0/24",
-        "comment": "Example Office Mail Clients"
-      }
-    ]
+    "entries": []
   },
   "geoip": {
-    "enabled": true,
-    "global_blacklist": [
-      {
-        "country": "RU",
-        "comment": "Russian Federation (Global Drop)"
-      },
-      {
-        "country": "CN",
-        "comment": "China (Global Drop)"
-      },
-      {
-        "country": "BR",
-        "comment": "Brazil (Global Drop)"
-      }
-    ],
+    "enabled": false,
+    "global_blacklist": [],
     "groups": {
       "http_only": {
-        "mode": "whitelist",
-        "countries": [
-          {
-            "country": "UA",
-            "comment": "Ukraine"
-          },
-          {
-            "country": "US",
-            "comment": "United States"
-          },
-          {
-            "country": "DE",
-            "comment": "Germany"
-          }
-        ]
+        "mode": "disabled",
+        "countries": []
       },
       "mail_clients": {
         "mode": "disabled",

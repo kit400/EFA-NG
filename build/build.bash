@@ -78,14 +78,13 @@ fi
 if [[ $OSVERSION =~ .*'release 10'.* || $OSVERSION =~ VERSION_ID=\"10\" || $OSVERSION =~ VERSION_ID=10 ]]; then
   logthis "Good, you are running CentOS Stream 10, RHEL 10, or compatible EL10 distribution"
   RELEASE=10
-elif [[ $OSVERSION =~ .*'release 9'.* || $OSVERSION =~ VERSION_ID=\"9\" || $OSVERSION =~ VERSION_ID=9 ]]; then
-  logthis "Good, you are running CentOS Stream 9, RHEL 9, or compatible EL9 distribution"
-  RELEASE=9
-elif [[ $OSVERSION =~ .*'release 8'.* || $OSVERSION =~ VERSION_ID=\"8\" || $OSVERSION =~ VERSION_ID=8 ]]; then
-  logthis "Good, you are running CentOS 8, RHEL 8, or compatible EL8 distribution"
-  RELEASE=8
+elif [[ $OSVERSION =~ .*'release 9'.* || $OSVERSION =~ VERSION_ID=\"9\" || $OSVERSION =~ VERSION_ID=9 || $OSVERSION =~ .*'release 8'.* || $OSVERSION =~ VERSION_ID=\"8\" || $OSVERSION =~ VERSION_ID=8 ]]; then
+  logthis "ERROR: EFA-NG 6.x requires CentOS Stream 10, RHEL 10, AlmaLinux 10, or Rocky Linux 10 (EL10)."
+  logthis "ERROR: EL8/EL9 repositories are not published in this branch. Stopping now."
+  logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
+  exit 1
 else
-  logthis "ERROR: You are not running CentOS 10, 9, 8 or equivalent Enterprise Linux distribution"
+  logthis "ERROR: You are not running CentOS Stream 10 / RHEL 10 or equivalent EL10 distribution"
   logthis "ERROR: Unsupported system, stopping now"
   logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
   exit 1
@@ -182,30 +181,49 @@ fi
 #-----------------------------------------------------------------------------#
 
 #-----------------------------------------------------------------------------#
-# Add EFA-NG Repository
+# Add EFA-NG Repository & GPG Key
 #-----------------------------------------------------------------------------#
-logthis "Setting up EFA-NG repository"
+logthis "Setting up EFA-NG repository and GPG signing key"
 mkdir -p /usr/src/eFa
 mkdir -p /etc/yum.repos.d/
+mkdir -p /etc/pki/rpm-gpg/
+
+GPG_KEY_URL="${mirror}/rpm/efa-ng/RPM-GPG-KEY-EFA-NG"
+GPG_KEY_FILE="/etc/pki/rpm-gpg/RPM-GPG-KEY-EFA-NG"
+
+if curl -fsSL --connect-timeout 5 --max-time 15 "$GPG_KEY_URL" -o "$GPG_KEY_FILE"; then
+    rpm --import "$GPG_KEY_FILE" 2>/dev/null || true
+    logthis "Imported EFA-NG RPM GPG key"
+else
+    logthis "ERROR: Failed to download EFA-NG GPG key from $GPG_KEY_URL"
+    logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
+    exit 1
+fi
 
 # Install repository definition
 cat > /etc/yum.repos.d/efa-ng.repo << EOF
 [efa-ng]
 name=EFA-NG Repository - EL${RELEASE}
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/release
-gpgcheck=0
+baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/release
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file://${GPG_KEY_FILE}
 enabled=1
 
 [efa-ng-testing]
 name=EFA-NG Testing Repository - EL${RELEASE}
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/testing
-gpgcheck=0
+baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/testing
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file://${GPG_KEY_FILE}
 enabled=0
 
 [efa-ng-dev]
 name=EFA-NG Dev Repository - EL${RELEASE}
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos${RELEASE}/dev
-gpgcheck=0
+baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/dev
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=file://${GPG_KEY_FILE}
 enabled=0
 EOF
 
@@ -287,9 +305,12 @@ fi
 # Kickstart automated provisioning hooks
 #-----------------------------------------------------------------------------#
 if [[ "$action" == "kstesting" || "$action" == "ksproduction" || "$action" == "ksdev" ]]; then
-  logthis "Configuring Kickstart default credentials"
-  echo 'echo "First time login: root/eFaPr0j3ct" >> /etc/issue' >> /etc/rc.d/rc.local
-  echo "root:eFaPr0j3ct" | chpasswd --md5 root 2>/dev/null || echo "root:eFaPr0j3ct" | chpasswd
+  if [[ -n "${EFA_KS_ROOT_PASS:-}" ]]; then
+    logthis "Configuring Kickstart root credentials from EFA_KS_ROOT_PASS"
+    echo "root:${EFA_KS_ROOT_PASS}" | chpasswd
+  else
+    logthis "Kickstart mode: skipping default root password override (EFA_KS_ROOT_PASS not set)"
+  fi
   systemctl disable sshd 2>/dev/null || true
 fi
 
