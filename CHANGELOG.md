@@ -5,6 +5,24 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.7] - 2026-10-30
+
+### Added
+- **MailWatch-NG Filter Builder: `AND` / `OR` Condition Logic & Match Mode Switcher**:
+  - Interactive logic selector (`AND` / `OR`) added to the Add Filter criteria row (`filter-col-logic`), remembering user selection across subsequent conditions.
+  - One-click interactive `AND` (slate badge) / `OR` (amber badge) toggle chips displayed directly between active filter criteria.
+  - Global match-mode switcher (`Match: [ALL (AND)] [ANY (OR)]`) enabling instant bulk switching between conjunctive (`AND`) and disjunctive (`OR`) filtering.
+  - Grouped SQL clause isolation: user filter conditions are strictly encapsulated in `AND ( cond1 OR cond2 ... )`, eliminating operator precedence conflicts and guaranteeing full isolation for domain/user access restrictions (`$_SESSION['global_filter']`).
+  - Enhanced human-readable filter history tracking: correctly formats multi-clause filter summaries (e.g. `To contains "help" OR To contains "abuse"`).
+  - Database schema & migration support: added `logic` column to `saved_filters` table in `create.sql` and `upgrade.php` with backward-compatible fallback for legacy databases.
+- **Cache-Busting & Web Asset Optimization**:
+  - Added automatic `filemtime` timestamp versioning (`style.css?v=<filemtime>`) in `functions.php` to ensure client browsers immediately load fresh CSS without manual cache clearing.
+- **Security & Package Updates**:
+  - Updated PHP 8.4 runtime packages to 8.4.27-2 addressing CVE-2026-109618 and CVE-2026-109619.
+  - Fixed cron automated rule updates (`sa-compile` and phishing feed synchronization).
+- **Regression Testing**:
+  - Added new integration test suite (`tests/Integration/MWFilterLogicTest.php`) verifying logic connectives, SQL grouping, toggle badges, switcher controls, and persistence across 11 test cases and 63 assertions.
+
 ## [6.0.6] - 2026-08-30
 
 ### Added

@@ -21,7 +21,7 @@
 
 Name:      eFa
 Summary:   eFa Maintenance rpm
-Version: 6.0.6
+Version: 6.0.7
 Release:   %{releasenum}.eFa%{?dist}
 Group:     Applications/System
 URL:       https://efa-ng.space.ua
