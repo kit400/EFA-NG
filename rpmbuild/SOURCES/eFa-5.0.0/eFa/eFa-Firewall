@@ -457,32 +457,22 @@ def apply_firewall(cfg, silent=False):
     ]
 
     if not enabled:
-        # Open / Unrestricted Mode: do not disable firewalld or impose restrictions
-        if is_nftables_active():
-            subprocess.run(["nft", "delete", "table", "inet", "efa"], capture_output=True, text=True)
-        if os.path.exists(NFT_EFA_FILE):
-            nft_lines.extend([
-                "    chain input {",
-                "        type filter hook input priority filter; policy accept;",
-                "    }",
-                "    chain forward {",
-                "        type filter hook forward priority filter; policy accept;",
-                "    }",
-                "    chain output {",
-                "        type filter hook output priority filter; policy accept;",
-                "    }",
-                "}"
-            ])
-            tmp_file = NFT_EFA_FILE + ".tmp"
-            with open(tmp_file, "w", encoding="utf-8") as f:
-                f.write("\n".join(nft_lines) + "\n")
-            os.chmod(tmp_file, 0o644)
-            os.replace(tmp_file, NFT_EFA_FILE)
+        # Protection disabled: remove only the eFa table and leave firewalld in charge
+        subprocess.run(["nft", "delete", "table", "inet", "efa"], capture_output=True, text=True)
+        os.makedirs(os.path.dirname(NFT_EFA_FILE), exist_ok=True)
+        tmp_file = NFT_EFA_FILE + ".tmp"
+        with open(tmp_file, "w", encoding="utf-8") as f:
+            f.write("#!/usr/sbin/nft -f\n")
+            f.write("# EFA-NG firewall disabled: system firewall (firewalld) is in charge\n")
+            f.write("table inet efa\n")
+            f.write("delete table inet efa\n")
+        os.chmod(tmp_file, 0o644)
+        os.replace(tmp_file, NFT_EFA_FILE)
         if not silent:
             if RICH_AVAILABLE:
-                console.print("[bold yellow]● eFa-Firewall restriction mode is DISABLED (Open Mode).[/]")
+                console.print("[bold yellow]● eFa-Firewall restriction mode is DISABLED (firewalld remains in charge).[/]")
             else:
-                print("[eFa-Firewall] Restriction mode is DISABLED (Open Mode).")
+                print("[eFa-Firewall] Restriction mode is DISABLED (firewalld remains in charge).")
         return True
     else:
         # 1. Parse Static IPs
@@ -1450,6 +1440,7 @@ def main():
     parser.add_argument("--geoip-block-del", metavar="COUNTRY", help="Delete country from Global Blacklist")
     parser.add_argument("--update-geoip", action="store_true", help="Download/update all configured country CIDR zone files")
     parser.add_argument("--tui", action="store_true", help="Run interactive TUI console")
+    parser.add_argument("--force", action="store_true", help="Apply even if the current SSH client is not in the Admins group")
 
     args = parser.parse_args()
     cfg = load_config()

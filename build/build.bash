@@ -227,12 +227,24 @@ gpgkey=file://${GPG_KEY_FILE}
 enabled=0
 EOF
 
+# Abort if the requested testing/dev repository is not published (dnf would fail on a 404 repomd.xml)
+function check_repo() {
+    if ! curl -sfI --connect-timeout 5 --max-time 15 "${mirror}/rpm/efa-ng/centos${RELEASE}/$1/repodata/repomd.xml" > /dev/null; then
+        logthis "ERROR: EFA-NG $1 repository for EL${RELEASE} is not published"
+        logthis "ERROR: Run the installer without arguments to use the release repository"
+        logthis "^^^^^^^^^^ SCRIPT ABORTED ^^^^^^^^^^"
+        exit 1
+    fi
+}
+
 case "$action" in
     ("testing"|"kstesting"|"testingnoefa")
+        check_repo testing
         dnf config-manager --set-enabled efa-ng-testing 2>/dev/null || true
         logthis "Enabled EFA-NG testing repository"
         ;;
     ("dev"|"ksdev"|"devnoefa")
+        check_repo dev
         dnf config-manager --set-enabled efa-ng-dev 2>/dev/null || true
         logthis "Enabled EFA-NG dev repository"
         ;;

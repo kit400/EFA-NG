@@ -130,7 +130,7 @@ log "Step 2: Committing and tagging repositories..."
 if [ "$DRY_RUN" -eq 0 ]; then
     # 2a. MailWatch-NG
     if [ -d "${MAILWATCH_DIR}/.git" ]; then
-        git -C "${MAILWATCH_DIR}" add -A
+        git -C "${MAILWATCH_DIR}" add mailscanner/functions.php version.json
         git -C "${MAILWATCH_DIR}" commit -m "Release ${TAG_NAME}" || true
         git -C "${MAILWATCH_DIR}" tag -f "${TAG_NAME}" -m "Release ${TAG_NAME}"
         git -C "${MAILWATCH_DIR}" push origin main --tags || warn "Failed to push MailWatch-NG tags"
@@ -139,7 +139,7 @@ if [ "$DRY_RUN" -eq 0 ]; then
 
     # 2b. EFA-NG
     if [ -d "${EFA_DIR}/.git" ]; then
-        git -C "${EFA_DIR}" add -A
+        git -C "${EFA_DIR}" add version.json CHANGELOG.md rpmbuild/SPECS/eFa5.spec rpmbuild/SPECS/MailWatch.spec rpm/efa-ng/centos10/release rpm/efa-ng/RPM-GPG-KEY-EFA-NG
         git -C "${EFA_DIR}" commit -m "Release ${TAG_NAME}" || true
         git -C "${EFA_DIR}" tag -f "${TAG_NAME}" -m "Release ${TAG_NAME}"
         git -C "${EFA_DIR}" push origin main --tags || warn "Failed to push EFA-NG tags"

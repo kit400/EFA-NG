@@ -7,13 +7,13 @@
 
 **EFA-NG** (Email Filter Appliance - Next Generation) is a modern, high-performance, open-source email security gateway designed to protect mail infrastructures against spam, phishing, malware, and viruses.
 
-Forked and modernized from eFa5, **EFA-NG** is re-engineered with full support for **CentOS Stream 10** (and the Enterprise Linux 10 ecosystem: RHEL 10, AlmaLinux 10, Rocky Linux 10), leveraging native **PHP 8.3**, **Perl 5.38/5.40**, **ClamAV 1.4+**, **SpamAssassin 4.0+**, **MariaDB 10.11+**, and strict **SELinux** security policies.
+Forked and modernized from eFa5, **EFA-NG** is re-engineered with full support for **CentOS Stream 10** (and the Enterprise Linux 10 ecosystem: RHEL 10, AlmaLinux 10, Rocky Linux 10), leveraging native **PHP 8.4**, **Perl 5.40**, **ClamAV 1.4+**, **SpamAssassin 4.0+**, **MariaDB 10.11+**, and strict **SELinux** security policies.
 
 ---
 
 ## Quick Installation
 
-On a fresh minimal installation of **CentOS Stream 10** (or compatible EL10 / EL9 system), run the following command as `root` (or via `sudo`):
+On a fresh minimal installation of **CentOS Stream 10** (or a compatible EL10 system: RHEL 10, AlmaLinux 10, Rocky Linux 10), run the following command as `root` (or via `sudo`):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash | bash
@@ -51,7 +51,7 @@ EFA-NG unifies best-of-breed open-source security technologies into a cohesive, 
 
 ## System Requirements
 
-- **Operating System**: CentOS Stream 10 (recommended), RHEL 10, AlmaLinux 10, Rocky Linux 10, or CentOS Stream 9.
+- **Operating System**: CentOS Stream 10 (recommended), RHEL 10, AlmaLinux 10, or Rocky Linux 10. EL9/EL8 are not supported (no packages are published for them).
 - **CPU**: Minimum 2 vCPUs (4+ vCPUs recommended for production environments).
 - **Memory**: Minimum 4 GB RAM (8+ GB RAM recommended for multi-engine AV/AS processing).
 - **Storage**: 20 GB+ free disk space (SSD recommended for mail queue and MariaDB).

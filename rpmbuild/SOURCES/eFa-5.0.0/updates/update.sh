@@ -248,10 +248,34 @@ execcmd
 cmd='systemctl start clamav-freshclam'
 execcmd
 
-# Apply firewall rules if eFa-Firewall is available
-if [[ -x /usr/sbin/eFa-Firewall ]]; then
-    cmd='/usr/sbin/eFa-Firewall --apply'
-    execcmd
+# eFa 6.0.6-10..12 copied the old firewall default (enabled, example admin subnets, RU/CN/BR dropped on
+# all ports incl. 25) and applied it. If that config was never edited, swap in the new disabled default,
+# remove the eFa nftables table and bring back firewalld, which the old version had switched off.
+if [[ -x /usr/sbin/eFa-Firewall && -f /etc/eFa/firewall.conf && -f /etc/eFa/firewall.conf.default ]]; then
+    case "$(sha256sum /etc/eFa/firewall.conf | awk '{print $1}')" in
+        960d50e758c08793ad35363df83445f2ef569995d1528ae38db53d6e72fd6eb9|\
+        f702cd794f0bd1fcbee876576c2b659bcc849b6ce96fd1f72d0aeac3db587250|\
+        f0a594a3cb1b5799ad1952c92ed70a5ac01f54dd0c943b0f6fc3dfac745f0eb3)
+            echo "Replacing unmodified old eFa-Firewall default config (backup: /etc/eFa/firewall.conf.old-default)"
+            cp -p /etc/eFa/firewall.conf /etc/eFa/firewall.conf.old-default
+            cp /etc/eFa/firewall.conf.default /etc/eFa/firewall.conf
+            chmod 0640 /etc/eFa/firewall.conf
+            cmd='/usr/sbin/eFa-Firewall --apply'
+            execcmd
+            if [[ -f /usr/lib/systemd/system/firewalld.service ]]; then
+                cmd='systemctl enable --now firewalld'
+                execcmd
+            fi
+            ;;
+    esac
+fi
+
+# Re-apply firewall rules only if the admin has configured and enabled eFa-Firewall
+if [[ -x /usr/sbin/eFa-Firewall && -f /etc/eFa/firewall.conf ]]; then
+    if python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get("enabled") is True else 1)' /etc/eFa/firewall.conf 2>/dev/null; then
+        cmd='/usr/sbin/eFa-Firewall --apply'
+        execcmd
+    fi
 fi
 
 # Disable maintenance mode if disabled during script
