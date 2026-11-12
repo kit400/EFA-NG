@@ -99,9 +99,9 @@ Here is how we can smoothly organize the transition:
 2. Domain & Web Hosting (DNS):
    I completely agree that pointing the DNS to our new server is the cleanest and safest solution. It avoids inheriting old server maintenance or dealing with legacy software. 
    When you're ready, here are the DNS records to point to our infrastructure:
-   - efa-project.org (A record) -> [ВАШ_IP_СЕРВЕРА]
-   - www.efa-project.org (A / CNAME record) -> [ВАШ_IP_СЕРВЕРА]
-   - repo.efa-project.org (A / CNAME record) -> [ВАШ_IP_СЕРВЕРА]
+   - efa-project.org (A record) -> 212.1.66.160
+   - www.efa-project.org (A / CNAME record) -> 212.1.66.160
+   - repo.efa-project.org (A / CNAME record) -> 212.1.66.160
    (We will handle Let's Encrypt SSL certificates, modern Nginx/Apache configuration, and GPG-signed RPM repository mirrors on this end).
 
 3. Community & Forums:
@@ -137,9 +137,9 @@ GitHub: @kit400
 2. Домен и хостинг (DNS):
    Я полностью согласен, что перенаправление DNS на наш новый сервер — самое чистое и безопасное решение. Это избавит от необходимости обслуживать старый сервер или разбираться с устаревшим софтом.
    Когда будешь готов, вот записи DNS для перенаправления:
-   - efa-project.org (A) -> [ВАШ_IP_СЕРВЕРА]
-   - www.efa-project.org (A / CNAME) -> [ВАШ_IP_СЕРВЕРА]
-   - repo.efa-project.org (A / CNAME) -> [ВАШ_IP_СЕРВЕРА]
+   - efa-project.org (A) -> 212.1.66.160
+   - www.efa-project.org (A / CNAME) -> 212.1.66.160
+   - repo.efa-project.org (A / CNAME) -> 212.1.66.160
    (Мы сами настроим SSL-сертификаты Let's Encrypt, современный веб-сервер и зеркало GPG-подписанного RPM-репозитория).
 
 3. Сообщество и форумы:
