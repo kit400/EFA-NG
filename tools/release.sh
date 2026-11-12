@@ -177,13 +177,16 @@ if [ "$SKIP_DEPLOY" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
     fi
 fi
 
-# STEP 4: Portal & Documentation Deployment (http://efa-ng.space.ua)
-log "Step 4: Deploying documentation and portal updates (http://efa-ng.space.ua)..."
+# STEP 4: Portal & Documentation Deployment (Production Web Node & Local Portal)
+log "Step 4: Deploying documentation, portal updates, and RPM repository to production web node..."
 if [ "$DRY_RUN" -eq 0 ]; then
     if [ -f "${PORTAL_DIR}/deploy.sh" ]; then
         sudo -n "${PORTAL_DIR}/deploy.sh" || php "${PORTAL_DIR}/deploy/announce.php" --sync-docs
     fi
-    success "Documentation synchronized to http://efa-ng.space.ua/docs/08-changelog"
+    if [ -f "${SCRIPT_DIR}/deploy_web.sh" ]; then
+        bash "${SCRIPT_DIR}/deploy_web.sh" || warn "Could not deploy to efa-web automatically."
+    fi
+    success "Portal and RPM repository synchronized."
 fi
 
 # STEP 5: Publish Announcement to Community Forum & Telegram Topic
