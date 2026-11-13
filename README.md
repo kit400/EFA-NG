@@ -2,7 +2,7 @@
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platform: CentOS Stream 10 / EL10](https://img.shields.io/badge/Platform-CentOS%20Stream%2010%20%7C%20EL10-red.svg)](https://centos.org)
-[![Repository](https://img.shields.io/badge/GitHub-kit400%2FEFA--NG-green.svg)](https://github.com/kit400/EFA-NG)
+[![Repository](https://img.shields.io/badge/GitHub-E--F--A%2FeFa6-green.svg)](https://github.com/E-F-A/eFa6)
 [![Telegram Channel](https://img.shields.io/badge/Telegram-Official%20Channel-24A1DE.svg?logo=telegram&logoColor=white)](https://t.me/EFA_NG)
 
 **EFA-NG** (Email Filter Appliance - Next Generation) is a modern, high-performance, open-source email security gateway designed to protect mail infrastructures against spam, phishing, malware, and viruses.
@@ -16,7 +16,7 @@ Forked and modernized from eFa5, **EFA-NG** is re-engineered with full support f
 On a fresh minimal installation of **CentOS Stream 10** (or a compatible EL10 system: RHEL 10, AlmaLinux 10, Rocky Linux 10), run the following command as `root` (or via `sudo`):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash | bash
+curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash | bash
 ```
 
 ### Installation Options
@@ -25,9 +25,9 @@ You can pass an optional argument to the installation script:
 
 | Mode | Command | Description |
 | :--- | :--- | :--- |
-| **Production** *(default)* | `curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash \| bash` | Standard production deployment with release repository |
-| **Testing** | `curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash \| bash -s -- testing` | Deployment utilizing the testing repository |
-| **Development** | `curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash \| bash -s -- dev` | Deployment utilizing dev builds and tooling |
+| **Production** *(default)* | `curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash \| bash` | Standard production deployment with release repository |
+| **Testing** | `curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash \| bash -s -- testing` | Deployment utilizing the testing repository |
+| **Development** | `curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash \| bash -s -- dev` | Deployment utilizing dev builds and tooling |
 | **Kickstart / Automated** | `... \| bash -s -- ksproduction` | Headless kickstart installation with automated root credential setup |
 
 ---
@@ -88,7 +88,7 @@ dnf -y install epel-release
 dnf config-manager --set-enabled crb
 
 # Add EFA-NG repository
-curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/repos/efa-ng-centos10.repo -o /etc/yum.repos.d/efa-ng.repo
+curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/repos/efa-ng-centos10.repo -o /etc/yum.repos.d/efa-ng.repo
 ```
 
 ---
@@ -99,8 +99,8 @@ To set up an RPM build environment and compile all EFA-NG packages locally on Ce
 
 ```bash
 # Clone the repository
-git clone https://github.com/kit400/EFA-NG.git
-cd EFA-NG
+git clone https://github.com/E-F-A/eFa6.git
+cd eFa6
 
 # Prepare the build toolchain
 ./build/devprebuild.sh
@@ -117,8 +117,8 @@ Built RPMs and repository metadata will be generated in `rpm/efa-ng/centos10/rel
 ## Community & Official Support
 
 * **Official Support Channel (Telegram)**: [https://t.me/EFA_NG](https://t.me/EFA_NG)
-* **Official Project Portal**: [https://efa-ng.space.ua](https://efa-ng.space.ua)
-* **GitHub Issues & Discussions**: [https://github.com/kit400/EFA-NG/issues](https://github.com/kit400/EFA-NG/issues)
+* **Official Project Portal**: [https://efa-project.org](https://efa-project.org) (Mirror: [https://efa-ng.space.ua](https://efa-ng.space.ua))
+* **GitHub Issues & Discussions**: [https://github.com/E-F-A/eFa6/issues](https://github.com/E-F-A/eFa6/issues)
 
 ---
 
@@ -127,7 +127,7 @@ Built RPMs and repository metadata will be generated in `rpm/efa-ng/centos10/rel
 Contributions, bug reports, and pull requests are welcome!
 Please ensure that all code comments, documentation, and commit messages follow standard English conventions.
 
-1. Fork the repository (`https://github.com/kit400/EFA-NG`).
+1. Fork the repository (`https://github.com/E-F-A/eFa6`).
 2. Create your feature branch (`git checkout -b feature/amazing-feature`).
 3. Commit your changes (`git commit -m 'Add amazing feature'`).
 4. Push to the branch (`git push origin feature/amazing-feature`).

@@ -1,10 +1,10 @@
 #!/bin/bash
 #-----------------------------------------------------------------------------#
 # EFA-NG Build Script (CentOS 10 / 9 / 8)
-# Repository: https://github.com/kit400/EFA-NG
+# Repository: https://github.com/E-F-A/eFa6
 #-----------------------------------------------------------------------------#
 # Copyright (C) 2013~2024 https://efa-project.org
-# Copyright (C) 2026 EFA-NG Project https://github.com/kit400/EFA-NG
+# Copyright (C) 2026 eFa Project https://github.com/E-F-A/eFa6
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ action=$1
 #-----------------------------------------------------------------------------#
 # Install EFA-NG
 #-----------------------------------------------------------------------------#
-mirror="https://raw.githubusercontent.com/kit400/EFA-NG/main"
+mirror="https://raw.githubusercontent.com/E-F-A/eFa6/main"
 LOGFILE="/var/log/eFa/build.log"
 
 #-----------------------------------------------------------------------------#
@@ -203,24 +203,27 @@ fi
 # Install repository definition
 cat > /etc/yum.repos.d/efa-ng.repo << EOF
 [efa-ng]
-name=EFA-NG Repository - EL${RELEASE}
-baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/release
+name=eFa 6 Repository - EL${RELEASE}
+baseurl=https://repo.efa-project.org/efa-ng/centos${RELEASE}/release
+        ${mirror}/rpm/efa-ng/centos${RELEASE}/release
 gpgcheck=1
 repo_gpgcheck=1
 gpgkey=file://${GPG_KEY_FILE}
 enabled=1
 
 [efa-ng-testing]
-name=EFA-NG Testing Repository - EL${RELEASE}
-baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/testing
+name=eFa 6 Testing Repository - EL${RELEASE}
+baseurl=https://repo.efa-project.org/efa-ng/centos${RELEASE}/testing
+        ${mirror}/rpm/efa-ng/centos${RELEASE}/testing
 gpgcheck=1
 repo_gpgcheck=1
 gpgkey=file://${GPG_KEY_FILE}
 enabled=0
 
 [efa-ng-dev]
-name=EFA-NG Dev Repository - EL${RELEASE}
-baseurl=${mirror}/rpm/efa-ng/centos${RELEASE}/dev
+name=eFa 6 Dev Repository - EL${RELEASE}
+baseurl=https://repo.efa-project.org/efa-ng/centos${RELEASE}/dev
+        ${mirror}/rpm/efa-ng/centos${RELEASE}/dev
 gpgcheck=1
 repo_gpgcheck=1
 gpgkey=file://${GPG_KEY_FILE}

@@ -46,7 +46,7 @@ Whether you run a standalone gateway or high-volume mail infrastructure, EFA-NG 
 5. **Automated One-Liner Installer & Pre-built RPMs**
    - Complete installation automated via a single command:
      ```bash
-     curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash | bash
+     curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash | bash
      ```
    - Automated RPM repository with transparent build specs and clean packaging pipeline.
 
@@ -57,7 +57,7 @@ Whether you run a standalone gateway or high-volume mail infrastructure, EFA-NG 
 On a fresh minimal installation of **CentOS Stream 10** (or compatible EL10 / EL9 system), simply run as root:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/kit400/EFA-NG/main/build/build.bash | bash
+curl -sSL https://raw.githubusercontent.com/E-F-A/eFa6/main/build/build.bash | bash
 ```
 
 Once installed, reboot the server, walk through the first-time setup wizard (`eFa-Init`), and access the modernized MailWatch-NG dashboard at `https://<your-server-ip>/`.
@@ -68,10 +68,9 @@ Once installed, reboot the server, walk through the first-time setup wizard (`eF
 
 We welcome feedback, testing, bug reports, and contributions from all members of the eFa community!
 
-* **Official Website**: [https://efa-ng.space.ua](https://efa-ng.space.ua)
-* **Community Forum**: [https://forum.efa-project.org](https://forum.efa-project.org)
+* **Official Website**: [https://efa-project.org](https://efa-project.org) (Mirror: [https://efa-ng.space.ua](https://efa-ng.space.ua))
 * **Telegram Channel**: [https://t.me/EFA_NG](https://t.me/EFA_NG)
-* **GitHub (EFA-NG Gateway)**: [https://github.com/kit400/EFA-NG](https://github.com/kit400/EFA-NG)
+* **GitHub (Official eFa 6)**: [https://github.com/E-F-A/eFa6](https://github.com/E-F-A/eFa6)
 * **GitHub (MailWatch-NG WebUI)**: [https://github.com/kit400/MailWatch-NG](https://github.com/kit400/MailWatch-NG)
 
 ---

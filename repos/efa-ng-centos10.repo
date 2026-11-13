@@ -1,18 +1,30 @@
 [efa-ng]
-name=EFA-NG Repository - CentOS Stream 10 / EL10 ($basearch)
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/release
-gpgcheck=0
+name=eFa 6 Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://repo.efa-project.org/efa-ng/centos10/release
+        https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/centos10/release
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://repo.efa-project.org/efa-ng/RPM-GPG-KEY-EFA-NG
+       https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/RPM-GPG-KEY-EFA-NG
 enabled=1
 priority=10
 
 [efa-ng-testing]
-name=EFA-NG Testing Repository - CentOS Stream 10 / EL10 ($basearch)
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/testing
-gpgcheck=0
+name=eFa 6 Testing Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://repo.efa-project.org/efa-ng/centos10/testing
+        https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/centos10/testing
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://repo.efa-project.org/efa-ng/RPM-GPG-KEY-EFA-NG
+       https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/RPM-GPG-KEY-EFA-NG
 enabled=0
 
 [efa-ng-dev]
-name=EFA-NG Dev Repository - CentOS Stream 10 / EL10 ($basearch)
-baseurl=https://raw.githubusercontent.com/kit400/EFA-NG/main/rpm/efa-ng/centos10/dev
-gpgcheck=0
+name=eFa 6 Dev Repository - CentOS Stream 10 / EL10 ($basearch)
+baseurl=https://repo.efa-project.org/efa-ng/centos10/dev
+        https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/centos10/dev
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://repo.efa-project.org/efa-ng/RPM-GPG-KEY-EFA-NG
+       https://raw.githubusercontent.com/E-F-A/eFa6/main/rpm/efa-ng/RPM-GPG-KEY-EFA-NG
 enabled=0
