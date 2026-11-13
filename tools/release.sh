@@ -143,6 +143,9 @@ if [ "$DRY_RUN" -eq 0 ]; then
         git -C "${EFA_DIR}" commit -m "Release ${TAG_NAME}" || true
         git -C "${EFA_DIR}" tag -f "${TAG_NAME}" -m "Release ${TAG_NAME}"
         git -C "${EFA_DIR}" push origin main --tags || warn "Failed to push EFA-NG tags"
+        if git -C "${EFA_DIR}" remote get-url efa6 >/dev/null 2>&1; then
+            git -C "${EFA_DIR}" push efa6 main --tags || warn "Failed to push eFa6 tags"
+        fi
         success "EFA-NG committed and tagged: ${TAG_NAME}"
     fi
 
