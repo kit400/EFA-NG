@@ -67,6 +67,7 @@ for arg in "$@"; do
     esac
 done
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EFA_DIR="/home/kit/EFA-NG"
 MAILWATCH_DIR="/home/kit/MailWatch-NG"
 PORTAL_DIR="/home/kit/EFA-NG-portal"
@@ -130,7 +131,7 @@ log "Step 2: Committing and tagging repositories..."
 if [ "$DRY_RUN" -eq 0 ]; then
     # 2a. MailWatch-NG
     if [ -d "${MAILWATCH_DIR}/.git" ]; then
-        git -C "${MAILWATCH_DIR}" add mailscanner/functions.php version.json
+        git -C "${MAILWATCH_DIR}" add -A
         git -C "${MAILWATCH_DIR}" commit -m "Release ${TAG_NAME}" || true
         git -C "${MAILWATCH_DIR}" tag -f "${TAG_NAME}" -m "Release ${TAG_NAME}"
         git -C "${MAILWATCH_DIR}" push origin main --tags || warn "Failed to push MailWatch-NG tags"
@@ -139,7 +140,7 @@ if [ "$DRY_RUN" -eq 0 ]; then
 
     # 2b. EFA-NG
     if [ -d "${EFA_DIR}/.git" ]; then
-        git -C "${EFA_DIR}" add version.json CHANGELOG.md rpmbuild/SPECS/eFa5.spec rpmbuild/SPECS/MailWatch.spec rpm/efa-ng/centos10/release rpm/efa-ng/RPM-GPG-KEY-EFA-NG
+        git -C "${EFA_DIR}" add -A
         git -C "${EFA_DIR}" commit -m "Release ${TAG_NAME}" || true
         git -C "${EFA_DIR}" tag -f "${TAG_NAME}" -m "Release ${TAG_NAME}"
         git -C "${EFA_DIR}" push origin main --tags || warn "Failed to push EFA-NG tags"
@@ -160,23 +161,42 @@ else
     log "[DRY-RUN] Would tag and push ${TAG_NAME} in EFA-NG and MailWatch-NG"
 fi
 
-# STEP 3: Deploy to Test Server (efa-test / 195.230.150.68)
+# STEP 3: Deploy to Test Servers (efa-test / 195.230.150.68 and efa-fresh / 195.230.150.80)
 if [ "$SKIP_DEPLOY" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-    log "Step 3: Deploying code and updating version on test server (efa-test)..."
+    log "Step 3: Deploying code and updating version on test servers (efa-test & efa-fresh)..."
     if ssh -o BatchMode=yes -o ConnectTimeout=5 efa-test "true" 2>/dev/null; then
         rsync -avz --delete \
             --exclude='conf.php' \
             --exclude='*.log' \
+            --exclude='temp/' \
             "${MAILWATCH_DIR}/mailscanner/" efa-test:/var/www/html/mailscanner/
 
         ssh efa-test "
             echo 'eFa-${CLEAN_VERSION}' > /etc/EFA-Version
             echo '${CLEAN_VERSION}' > /etc/eFa-Version 2>/dev/null || true
-            systemctl reload php-fpm || true
+            systemctl reload php-fpm httpd || true
         "
-        success "Test server updated to eFa-${CLEAN_VERSION}"
+        success "Test server (efa-test) updated to eFa-${CLEAN_VERSION}"
     else
         warn "Test server (efa-test) is currently unreachable. Skipping remote scp."
+    fi
+
+    if ssh -o BatchMode=yes -o ConnectTimeout=5 efa-fresh "true" 2>/dev/null; then
+        rsync -avz --delete \
+            --exclude='conf.php' \
+            --exclude='*.log' \
+            --exclude='temp/' \
+            "${MAILWATCH_DIR}/mailscanner/" efa-fresh:/var/www/html/mailscanner/
+
+        ssh efa-fresh "
+            echo 'eFa-${CLEAN_VERSION}' > /etc/EFA-Version
+            echo '${CLEAN_VERSION}' > /etc/eFa-Version 2>/dev/null || true
+            chown -R apache:apache /var/www/html/mailscanner
+            systemctl reload php-fpm httpd || true
+        "
+        success "Server (efa-fresh / efa-ng.ukrpack.net) updated to eFa-${CLEAN_VERSION}"
+    else
+        warn "Server (efa-fresh) is currently unreachable. Skipping remote scp."
     fi
 fi
 

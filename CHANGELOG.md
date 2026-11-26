@@ -5,6 +5,29 @@ All notable changes to the EFA-NG (Email Filter Appliance - Next Generation) pro
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.8] - 2026-11-26
+
+### Added
+- **Interactive Delivery Flow Diagram & Header Tabs (`detail.php`)**:
+  - Two-tab header interface: **Delivery Flow & Analysis** (active by default) and **Raw Headers**.
+  - **Originating Client & MUA Detection**: Automatically detects mail clients (Mozilla Thunderbird, Microsoft Outlook, Apple Mail, Roundcube Webmail, Android/Mobile, PHPMailer/Scripts) with client-specific icons, versions, and origin IP.
+  - **Full Origin GeoIP & ASN Integration**: Displays origin IP, country flag, city, and clickable ASN badges linked to `ipinfo.io`.
+  - **Hop-by-Hop Relay Chain Diagram**: Chronological delivery path tracking each relay server, showing source/destination hosts, receiving MTAs, and protocol.
+  - **Transit Delay & Latency Calculation**: Calculates precise transit time between each hop (`+1s`, `+4s`) with fast/warn latency badges, plus total end-to-end transit time.
+  - **Security & TLS Badging**: Inspects encryption at each hop, displaying TLS versions (e.g. 🔒 `TLS 1.3`), cipher suites (`TLS_AES_256_GCM_SHA384`), and warning badges for unencrypted plain hops.
+  - **Raw Headers Tab & One-Click Copy**: Monospace raw header viewer with an interactive "Copy Headers" button supporting `navigator.clipboard` and legacy fallbacks.
+
+### Fixed
+- **GeoIP Database Autoloader Resolution (`return_geoip_data()`)**:
+  - Fixed a regression where GeoIP lookups failed (`GeoIP lookup failed`) in `detail.php`, dashboard, and reports due to `\MaxMind\Db\Reader` autoloader not being loaded outside `geoip_update.php`.
+  - Added safe `class_exists()` guard and automated loading of `lib/maxmind-db/reader/autoload.php` inside `return_geoip_data()`.
+  - Reported and verified by community contributor Paul on Rocky Linux 10 / EL10.
+
+### Tests
+- Added automated regression test suites:
+  - `tests/Integration/MWGeoIPTest.php`: verifies MaxMind autoloader existence, private/local IP filtering, and safe fallback handling.
+  - `tests/Integration/MWMessageHeadersFlowTest.php`: verifies RFC 5322 header unfolding, MIME decoding, chronological hop ordering, transit delay calculation, MUA detection, and HTML rendering across 183 tests and 684 assertions.
+
 ## [6.0.7] - 2026-10-30
 
 ### Added

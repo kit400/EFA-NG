@@ -26,7 +26,7 @@
 #-----------------------------------------------------------------------------#
 Summary:       MailWatch Web Front-End for MailScanner (EFA-NG Fork)
 Name:          MailWatch
-Version:       6.0.7
+Version:       6.0.8
 Epoch:         1
 Release:       1.eFa%{?dist}
 License:       GNU GPL v2
