@@ -168,6 +168,18 @@ echo -e "allow\t.*\t-\t-" > /etc/MailScanner/filetype.rules.allowall.conf
 echo -e "allow\t.*\t-\t-" > /etc/MailScanner/archives.filename.rules.allowall.conf
 echo -e "allow\t.*\t-\t-" > /etc/MailScanner/archives.filetype.rules.allowall.conf
 
+# Allow digitally signed documents (DocNet, SED, KEP, p7s, asice)
+if [ -f /etc/MailScanner/filename.rules.conf ]; then
+    if ! grep -q '\.p7s' /etc/MailScanner/filename.rules.conf; then
+        sed -i '/Deny all other double file extensions/i # Allow digitally signed documents (DocNet, SED)\nallow\t\\.(pdf|docx?|xlsx?|xml)\\.(p7s|asice?)$\t-\t-\nallow\t\\.(p7s|asice?)\\.(pdf|docx?|xlsx?|xml)$\t-\t-\nallow\t\\.p7s$\t-\t-\n' /etc/MailScanner/filename.rules.conf
+    fi
+fi
+if [ -f /etc/MailScanner/archives.filename.rules.conf ]; then
+    if ! grep -q '\.p7s' /etc/MailScanner/archives.filename.rules.conf; then
+        sed -i '/Deny all other double file extensions/i # Allow digitally signed documents (DocNet, SED)\nallow\t\\.(pdf|docx?|xlsx?|xml)\\.(p7s|asice?)$\t-\t-\nallow\t\\.(p7s|asice?)\\.(pdf|docx?|xlsx?|xml)$\t-\t-\nallow\t\\.p7s$\t-\t-\n' /etc/MailScanner/archives.filename.rules.conf
+    fi
+fi
+
 echo -e "From:\t127.0.0.1\tno" > /etc/MailScanner/numeric.phishing.rules
 echo -e "From:\t::1\tno" >> /etc/MailScanner/numeric.phishing.rules
 echo -e "FromOrTo:\tDefault\tyes" >> /etc/MailScanner/numeric.phishing.rules

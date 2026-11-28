@@ -92,6 +92,38 @@ execcmd
 cmd='chmod -R 750 /var/spool/postfix/incoming'
 execcmd
 
+# Ensure quarantine permissions and groups
+cmd='chown -R postfix:mtagroup /var/spool/MailScanner/quarantine'
+execcmd
+cmd='chmod -R 770 /var/spool/MailScanner/quarantine'
+execcmd
+cmd='usermod -a -G mtagroup,postfix apache'
+execcmd
+
+# Allow digitally signed documents (DocNet, SED, KEP, p7s, asice)
+if [ -f /etc/MailScanner/filename.rules.conf ] && ! grep -q '\.p7s\.pdf' /etc/MailScanner/filename.rules.conf; then
+    sed -i '/Deny all other double file extensions/i # Allow digitally signed documents (DocNet, SED)\nallow\t\\.(pdf|docx?|xlsx?|xml)\\.(p7s|asice?)$\t-\t-\nallow\t\\.(p7s|asice?)\\.(pdf|docx?|xlsx?|xml)$\t-\t-\nallow\t\\.p7s$\t-\t-\n' /etc/MailScanner/filename.rules.conf 2>/dev/null || true
+    # If the custom rules block exists
+    if grep -q '\.pdf\.p7s\$' /etc/MailScanner/filename.rules.conf && ! grep -q '\.p7s\.pdf\$' /etc/MailScanner/filename.rules.conf; then
+        sed -i '/allow.*\.pdf\.p7s/a allow\t\\\.p7s\\\.pdf$\t-\t-' /etc/MailScanner/filename.rules.conf 2>/dev/null || true
+    fi
+fi
+if [ -f /etc/MailScanner/archives.filename.rules.conf ] && ! grep -q '\.p7s' /etc/MailScanner/archives.filename.rules.conf; then
+    sed -i '/Deny all other double file extensions/i # Allow digitally signed documents (DocNet, SED)\nallow\t\\.(pdf|docx?|xlsx?|xml)\\.(p7s|asice?)$\t-\t-\nallow\t\\.(p7s|asice?)\\.(pdf|docx?|xlsx?|xml)$\t-\t-\nallow\t\\.p7s$\t-\t-\n' /etc/MailScanner/archives.filename.rules.conf 2>/dev/null || true
+fi
+
+# DCC SELinux file contexts
+if which getenforce >/dev/null 2>&1 && [ "$(getenforce)" != "Disabled" ] && which semanage >/dev/null 2>&1; then
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/rcDCC' 2>/dev/null || true
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/start-.*' 2>/dev/null || true
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/stop-.*' 2>/dev/null || true
+    semanage fcontext -a -t dccifd_exec_t '/var/dcc/libexec/dccifd' 2>/dev/null || true
+    semanage fcontext -a -t dccd_exec_t '/var/dcc/libexec/dccd' 2>/dev/null || true
+    semanage fcontext -a -t dcc_dbclean_exec_t '/var/dcc/libexec/dbclean' 2>/dev/null || true
+    semanage fcontext -a -t dccifd_var_run_t '/var/dcc/dccifd' 2>/dev/null || true
+    restorecon -Rv /var/dcc /var/spool/MailScanner/quarantine 2>/dev/null || true
+fi
+
 if [[ -z $(grep smtpd_forbid_bare_newline /etc/postfix/main.cf) ]]; then
     # Protect against SMTP smuggling
     cmd='postconf -e "smtpd_forbid_unauth_pipelining = yes"'

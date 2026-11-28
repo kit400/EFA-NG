@@ -1,5 +1,5 @@
 
-module eFa 1.0.33;
+module eFa 1.0.34;
 
 type mailwatchsql_etc_t;
 type sqlgreysql_etc_t;
@@ -73,6 +73,8 @@ require {
     type mysqld_db_t;
     type mysqld_port_t;
     type dcc_client_map_t;
+    type dccifd_t;
+    type dccifd_var_run_t;
     type shadow_t;
     type postfix_smtpd_t;
     type getty_t;
@@ -418,8 +420,10 @@ allow mscan_t cdcc_exec_t:file { getattr execute open read execute_no_trans map 
 allow mscan_t dcc_client_exec_t:file { getattr execute open read execute_no_trans map };
 allow mscan_t dcc_client_map_t:file { getattr read write open lock map };
 allow mscan_t dcc_var_t:dir { getattr search write add_name remove_name };
-allow mscan_t dcc_var_t:file { getattr read write create open lock rename unlink };
+allow mscan_t dcc_var_t:file { getattr read write create open lock rename unlink map };
 allow mscan_t dcc_var_t:sock_file { getattr write };
+allow mscan_t dccifd_var_run_t:sock_file { write getattr };
+allow mscan_t dccifd_t:unix_stream_socket connectto;
 allow mscan_t razor_port_t:tcp_socket name_connect;
 allow mscan_t spamc_exec_t:file { getattr execute open read execute_no_trans ioctl };
 allow mscan_t spamd_var_lib_t:file { execute map };
@@ -457,6 +461,13 @@ allow sendmail_t postfix_etc_t:dir read;
 
 #============= named_t ==============
 allow named_t self:capability { net_raw };
+
+#============= dccifd_t ============
+allow dccifd_t self:process setpgid;
+allow dccifd_t self:capability dac_override;
+allow dccifd_t dcc_client_map_t:file map;
+allow dccifd_t dcc_var_t:file map;
+allow dccifd_t dccifd_var_run_t:file map;
 
 #============= systemd_logind_t ===============
 allow systemd_logind_t httpd_sys_script_t:dbus { send_msg };

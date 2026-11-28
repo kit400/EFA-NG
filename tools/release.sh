@@ -161,7 +161,7 @@ else
     log "[DRY-RUN] Would tag and push ${TAG_NAME} in EFA-NG and MailWatch-NG"
 fi
 
-# STEP 3: Deploy to Test Servers (efa-test / 195.230.150.68 and efa-fresh / 195.230.150.80)
+# STEP 3: Deploy to Servers (efa-test / 195.230.150.68 and efa.ukrpack.net / 195.230.150.77)
 if [ "$SKIP_DEPLOY" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
     log "Step 3: Deploying code and updating version on test servers (efa-test & efa-fresh)..."
     if ssh -o BatchMode=yes -o ConnectTimeout=5 efa-test "true" 2>/dev/null; then

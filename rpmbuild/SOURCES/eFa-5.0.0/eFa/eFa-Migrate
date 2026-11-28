@@ -829,8 +829,10 @@ execute_migration() {
             mig_errors=$((mig_errors + 1))
         fi
 
-        chown -R postfix:apache /var/spool/MailScanner/quarantine 2>/dev/null || true
+        chown -R postfix:mtagroup /var/spool/MailScanner/quarantine 2>/dev/null || true
         chmod -R 770 /var/spool/MailScanner/quarantine 2>/dev/null || true
+        usermod -a -G mtagroup,postfix apache 2>/dev/null || true
+        restorecon -Rv /var/spool/MailScanner/quarantine 2>/dev/null || true
         echo -e "       ${green}✔ Quarantine step completed.${clean}"
     fi
 

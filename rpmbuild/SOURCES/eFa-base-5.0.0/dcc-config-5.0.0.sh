@@ -49,6 +49,32 @@ sed -i '/^DBCLEAN_LOGDAYS=/ c\DBCLEAN_LOGDAYS=1' /var/dcc/dcc_conf
 sed -i '/^DCCIFD_LOGDIR=/ c\DCCIFD_LOGDIR="/var/dcc/log"' /var/dcc/dcc_conf
 chown postfix:mtagroup /var/dcc
 
+# SELinux configuration for DCC
+if which getenforce >/dev/null 2>&1 && [ "$(getenforce)" != "Disabled" ]; then
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/rcDCC' 2>/dev/null || true
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/start-.*' 2>/dev/null || true
+    semanage fcontext -a -t initrc_exec_t '/var/dcc/libexec/stop-.*' 2>/dev/null || true
+    semanage fcontext -a -t dccifd_exec_t '/var/dcc/libexec/dccifd' 2>/dev/null || true
+    semanage fcontext -a -t dccd_exec_t '/var/dcc/libexec/dccd' 2>/dev/null || true
+    semanage fcontext -a -t dcc_dbclean_exec_t '/var/dcc/libexec/dbclean' 2>/dev/null || true
+    semanage fcontext -a -t dccifd_var_run_t '/var/dcc/dccifd' 2>/dev/null || true
+    restorecon -Rv /var/dcc 2>/dev/null || true
+
+    # SELinux CIL module for EL10 / mmap and MailScanner IPC
+    cat << 'EOF' > /etc/selinux/efa_dcc_el10.cil
+(allow dccifd_t self (process (setpgid)))
+(allow dccifd_t self (capability (dac_override)))
+(allow dccifd_t dcc_client_map_t (file (map)))
+(allow dccifd_t dcc_var_t (file (map)))
+(allow dccifd_t dccifd_var_run_t (file (map)))
+(allow mscan_t dcc_var_t (file (map)))
+(allow mscan_t dcc_client_map_t (file (map)))
+(allow mscan_t dccifd_var_run_t (sock_file (write getattr)))
+(allow mscan_t dccifd_t (unix_stream_socket (connectto)))
+EOF
+    semodule -i /etc/selinux/efa_dcc_el10.cil 2>/dev/null || true
+fi
+
 # init for dcc
 #cp /var/dcc/libexec/rcDCC /etc/rc.d/init.d/adcc
 

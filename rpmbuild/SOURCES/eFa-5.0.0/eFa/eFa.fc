@@ -9,3 +9,10 @@
 /var/log/clamd.scan                --  system_u:object_r:antivirus_log_t:s0
 /var/run/clamd.socket              --  system_u:object_r:antivirus_var_run_t:s0
 /etc/sysconfig/network-scripts.bak --  system_u:object_r:net_conf_t:s0
+/var/dcc/libexec/rcDCC             --  system_u:object_r:initrc_exec_t:s0
+/var/dcc/libexec/start-.*          --  system_u:object_r:initrc_exec_t:s0
+/var/dcc/libexec/stop-.*           --  system_u:object_r:initrc_exec_t:s0
+/var/dcc/libexec/dccifd            --  system_u:object_r:dccifd_exec_t:s0
+/var/dcc/libexec/dccd              --  system_u:object_r:dccd_exec_t:s0
+/var/dcc/libexec/dbclean           --  system_u:object_r:dcc_dbclean_exec_t:s0
+/var/dcc/dccifd                    -s  system_u:object_r:dccifd_var_run_t:s0
